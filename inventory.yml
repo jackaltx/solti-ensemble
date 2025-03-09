@@ -1,0 +1,38 @@
+---
+all:
+  vars:
+    domain: a0a0.org
+    mylab_nolog: "{{ cluster_secure_log | bool | default(true) }}"
+    ansible_user: lavender
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
+    # basically non-ssh stuff, like LXC containers
+    mylab_non_ssh: false
+
+  children:
+    # ................................................
+    mylab:
+      # .........................................
+      # mylab hosts
+      hosts:
+        monitor11:
+          ansible_host: 192.168.55.11 # "monitor11.a0a0.org"
+
+      # .........................................
+      # mylab vars
+      vars:
+        telegraf_outputs: []
+
+      children:
+        # .....................................
+        vpn_clients:
+          hosts:
+            monitor11:
+              wireguard_svr_public_key: "{{ lookup('env', 'WG_PUBKEY') }}"
+              wireguard_cluster_preshared_key: "{{ lookup('env', 'WG_SHAREDKEY') }}"
+              wireguard_server_endpoint: "{{ lookup('env', 'WG_SERVER') }}"
+
+          # ........................................
+          # metric_collectors only vars
+          vars:
+            debug_level: warn

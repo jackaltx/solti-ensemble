@@ -1,5 +1,4 @@
 ---
-
 # ...................................................................
 - name: Verify required variables are set
   ansible.builtin.fail:
@@ -22,7 +21,6 @@
     - wireguard:install
     - wireguard:packages
 
-
 # ...................................................................
 # configure section
 #
@@ -30,7 +28,13 @@
   ansible.builtin.file:
     path: /etc/wireguard
     state: directory
-    mode: '0755'
+    mode: "0755"
+  become: true
+
+- name: Test if /etc/wireguard/public.key exists
+  ansible.builtin.stat:
+    path: /etc/wireguard/public.key
+  register: wg_exists
   become: true
 
 - name: Generate Wireguard keys
@@ -42,7 +46,7 @@
 - name: Set Wireguard key permissions
   ansible.builtin.file:
     path: "/etc/wireguard/{{ item }}"
-    mode: '0600'
+    mode: "0600"
   with_items:
     - private.key
     - public.key
@@ -66,7 +70,7 @@
   ansible.builtin.file:
     path: "./data"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Save keys to data file
   ansible.builtin.copy:
@@ -75,12 +79,12 @@
         private_key: "{{ private_key_content['content'] | b64decode | trim }}"
         public_key: "{{ public_key_content['content'] | b64decode | trim }}"
     dest: "./data/wireguard_keys.yml"
-    mode: '0600'
+    mode: "0600"
 
 # ...................................................................
 - name: Configure wg0.conf
   ansible.builtin.template:
     src: wg0.conf.j2
     dest: /etc/wireguard/wg0.conf
-    mode: '0600'
+    mode: "0600"
   become: true

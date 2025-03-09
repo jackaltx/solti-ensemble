@@ -1,0 +1,5 @@
+- hosts: vpn_clients
+  roles:
+    - role: wireguard
+  tags:
+    - wireguard
