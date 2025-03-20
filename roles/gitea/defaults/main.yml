@@ -1,0 +1,55 @@
+---
+# defaults file for gitea
+
+# Installation state - can be 'present' or 'absent'
+gitea_state: "present"
+
+# Installation options
+gitea_version: "1.21.3"
+gitea_force_reload: false
+
+# Network configuration
+gitea_http_domain: "localhost"
+gitea_http_port: 3000
+gitea_http_addr: "127.0.0.1"
+gitea_protocol: "http" # 'http' or 'https'
+
+gitea_root_url: "{{ gitea_protocol }}://{{ gitea_http_domain }}:{{ gitea_http_port }}/"
+
+# SSL configuration (optional)
+gitea_cert: ""
+gitea_key: ""
+
+# User configuration
+gitea_user: "git"
+gitea_group: "git"
+gitea_admin_user: "gitea_admin"
+gitea_admin_password: "" # Will be auto-generated if empty
+gitea_admin_email: "admin@example.com"
+
+# Security settings
+gitea_disable_registration: true
+gitea_require_signin: true
+
+# Database configuration
+gitea_db_type: "sqlite3" # 'sqlite3', 'mysql', 'postgres'
+gitea_db_host: "localhost" # For MySQL and PostgreSQL
+gitea_db_name: "gitea"
+gitea_db_user: "gitea"
+gitea_db_password: "" # Will be auto-generated if empty
+
+# Path configuration
+gitea_home_path: "/var/lib/gitea"
+gitea_data_path: "/var/lib/gitea/data"
+gitea_config_path: "/etc/gitea"
+gitea_log_path: "/var/log/gitea"
+gitea_app_ini_path: "/etc/gitea/app.ini"
+gitea_work_dir: "/var/lib/gitea"
+
+# Installation method
+gitea_binary_url: "https://dl.gitea.io/gitea/{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+gitea_binary_path: "/usr/local/bin/gitea"
+
+# Cleanup options
+gitea_delete_config: false
+gitea_delete_data: false

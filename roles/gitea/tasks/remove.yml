@@ -1,0 +1,69 @@
+---
+# Removal tasks for gitea
+
+# Stop and disable service
+- name: Stop and disable Gitea service
+  ansible.builtin.systemd_service:
+    name: gitea
+    state: stopped
+    enabled: false
+  become: true
+  ignore_errors: true
+
+# Remove binary
+- name: Remove Gitea binary
+  ansible.builtin.file:
+    path: "{{ gitea_binary_path }}"
+    state: absent
+  become: true
+
+# Remove system service
+- name: Remove Gitea service file
+  ansible.builtin.file:
+    path: "{{ gitea_service_path }}"
+    state: absent
+  become: true
+  notify:
+    - Reload systemd
+
+# Optionally remove configuration
+- name: Remove Gitea configuration files
+  when: gitea_delete_config
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ gitea_config_path }}"
+    - "{{ gitea_log_path }}"
+  become: true
+
+# Optionally remove data
+- name: Remove Gitea data
+  when: gitea_delete_data
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ gitea_home_path }}"
+    - "{{ gitea_data_path }}"
+  become: true
+
+# Optionally remove user and group
+- name: Remove Gitea user
+  when: gitea_delete_data
+  ansible.builtin.user:
+    name: "{{ gitea_user }}"
+    state: absent
+    remove: true
+  become: true
+  ignore_errors: true
+
+- name: Remove Gitea group
+  when: gitea_delete_data
+  ansible.builtin.group:
+    name: "{{ gitea_group }}"
+    state: absent
+  become: true
+  ignore_errors: true
+
+# No repository configuration to remove since we're using binary installation

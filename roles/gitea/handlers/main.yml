@@ -1,0 +1,14 @@
+---
+# handlers file for gitea
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  become: true
+
+- name: Restart gitea
+  ansible.builtin.systemd_service:
+    name: gitea
+    state: restarted
+    enabled: true
+  become: true

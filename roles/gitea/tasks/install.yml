@@ -1,0 +1,63 @@
+---
+# Installation tasks for gitea
+
+- name: Install dependencies
+  ansible.builtin.package:
+    name: "{{ gitea_dependencies }}"
+    state: present
+  become: true
+
+# Create user and group
+- name: Create Gitea group
+  ansible.builtin.group:
+    name: "{{ gitea_group }}"
+    state: present
+    system: true
+  become: true
+
+- name: Create Gitea user
+  ansible.builtin.user:
+    name: "{{ gitea_user }}"
+    group: "{{ gitea_group }}"
+    home: "{{ gitea_home_path }}"
+    shell: /bin/bash
+    system: true
+    create_home: true
+  become: true
+
+# Create required directories
+- name: Create required directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ gitea_user }}"
+    group: "{{ gitea_group }}"
+    mode: "0750"
+  loop:
+    - "{{ gitea_home_path }}"
+    - "{{ gitea_data_path }}"
+    - "{{ gitea_config_path }}"
+    - "{{ gitea_log_path }}"
+  become: true
+
+# Install Gitea from binary (recommended method by Gitea developers)
+- name: Install Gitea from binary
+  block:
+    - name: Download Gitea binary
+      ansible.builtin.get_url:
+        url: "{{ gitea_binary_url }}"
+        dest: "{{ gitea_binary_path }}"
+        mode: "0755"
+      become: true
+
+    - name: Create Gitea SystemD service
+      ansible.builtin.template:
+        src: gitea.service.j2
+        dest: "{{ gitea_service_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      notify:
+        - Reload systemd
+        - Restart gitea

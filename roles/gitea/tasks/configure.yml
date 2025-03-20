@@ -1,0 +1,76 @@
+---
+# Configuration tasks for gitea
+
+# Ensure the Gitea service file is properly configured
+- name: Configure Gitea service
+  ansible.builtin.template:
+    src: gitea.service.j2
+    dest: "{{ gitea_service_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Restart gitea
+
+# Configure app.ini
+- name: Configure Gitea app.ini
+  ansible.builtin.template:
+    src: app.ini.j2
+    dest: "{{ gitea_app_ini_path }}"
+    owner: "{{ gitea_user }}"
+    group: "{{ gitea_group }}"
+    mode: "0640"
+  become: true
+  notify:
+    - Restart gitea
+
+# Ensure service is enabled and started
+- name: Enable and start Gitea service
+  ansible.builtin.systemd_service:
+    name: gitea
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+
+# Wait for Gitea to be available
+- name: Wait for Gitea to start
+  ansible.builtin.uri:
+    url: "{{ gitea_root_url }}api/v1/version"
+    status_code: 200, 401, 404
+    follow_redirects: yes
+    timeout: 60
+  register: gitea_api_check
+  retries: 10
+  delay: 5
+  until: gitea_api_check.status in [200, 401, 404]
+  changed_when: false
+  ignore_errors: true
+
+# Configure initial admin user if this is a fresh installation
+- name: Check if Gitea admin user exists
+  ansible.builtin.shell: >
+    gitea admin user list | grep "{{ gitea_admin_user }}" | wc -l
+  args:
+    executable: /bin/bash
+  register: admin_exists
+  become: true
+  become_user: "{{ gitea_user }}"
+  changed_when: false
+  ignore_errors: true
+
+- name: Create Gitea admin user
+  ansible.builtin.shell: >
+    gitea admin user create 
+    --username {{ gitea_admin_user }}
+    --password '{{ gitea_admin_password }}'
+    --email {{ gitea_admin_email }}
+    --admin
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ gitea_user }}"
+  when: admin_exists.stdout == "0"
+  no_log: true

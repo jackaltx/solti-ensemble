@@ -16,7 +16,7 @@ all:
       # mylab hosts
       hosts:
         monitor11:
-          ansible_host: 192.168.55.11 # "monitor11.a0a0.org"
+          ansible_host: 192.168.55.11 # "monitor11.{{ domain }}"
 
       # .........................................
       # mylab vars

@@ -1,0 +1,12 @@
+---
+# RedHat-specific variables for gitea role
+
+gitea_dependencies:
+  - git
+  - curl
+  - ca-certificates
+  - openssh-server
+  - sqlite  # Default database
+
+# Service config
+gitea_service_path: "/etc/systemd/system/gitea.service"

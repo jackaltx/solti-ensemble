@@ -1,0 +1,51 @@
+---
+# tasks file for gitea
+
+# Fix for temporary directory permissions
+- name: Ensure ansible temp directory exists with proper permissions
+  ansible.builtin.file:
+    path: /tmp/ansible-tmp
+    state: directory
+    owner: root
+    group: root
+    mode: "0777"
+  become: true
+
+# Load OS-specific variables
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ lookup('first_found', params) }}"
+  vars:
+    params:
+      files:
+        - "{{ ansible_distribution | lower }}.yml"
+        - "{{ ansible_os_family | lower }}.yml"
+      paths:
+        - "{{ role_path }}/vars"
+
+# Generate passwords if not provided
+- name: Generate random admin password if not provided
+  ansible.builtin.set_fact:
+    gitea_admin_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=24, chars=['ascii_letters', 'digits', '!@#$%^&*()']) }}"
+  when: gitea_admin_password | length == 0
+  no_log: true
+
+- name: Generate random database password if not provided
+  ansible.builtin.set_fact:
+    gitea_db_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=24, chars=['ascii_letters', 'digits', '!@#$%^&*()']) }}"
+  when:
+    - gitea_db_type != 'sqlite3'
+    - gitea_db_password | length == 0
+  no_log: true
+
+# Installation state handling
+- name: Include install tasks
+  ansible.builtin.include_tasks: install.yml
+  when: gitea_state == 'present'
+
+- name: Include configure tasks
+  ansible.builtin.include_tasks: configure.yml
+  when: gitea_state == 'present'
+
+- name: Include remove tasks
+  ansible.builtin.include_tasks: remove.yml
+  when: gitea_state == 'absent'
