@@ -4,6 +4,7 @@
 APP_NAME = Gitea
 RUN_USER = {{ gitea_user }}
 RUN_MODE = prod
+WORK_PATH = {{ gitea_work_dir }}
 
 [repository]
 ROOT = {{ gitea_data_path }}/repositories
@@ -92,3 +93,4 @@ ENABLE_OPENID_SIGNUP = false
 EXPLORE_PAGING_NUM = 20
 ISSUE_PAGING_NUM   = 10
 FEED_MAX_COMMIT_NUM = 5
+
