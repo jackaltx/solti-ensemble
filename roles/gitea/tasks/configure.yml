@@ -51,26 +51,26 @@
 
 # Configure initial admin user if this is a fresh installation
 - name: Check if Gitea admin user exists
-  ansible.builtin.shell: >
-    gitea admin user list | grep "{{ gitea_admin_user }}" | wc -l
+  ansible.builtin.command: >
+    gitea admin user list
   args:
-    executable: /bin/bash
-  register: admin_exists
+    chdir: "{{ gitea_work_dir }}"
+  register: admin_list
   become: true
   become_user: "{{ gitea_user }}"
   changed_when: false
   ignore_errors: true
 
-- name: Create Gitea admin user
-  ansible.builtin.shell: >
+- name: Create Gitea admin user if not found
+  ansible.builtin.command: >
     gitea admin user create 
     --username {{ gitea_admin_user }}
     --password '{{ gitea_admin_password }}'
     --email {{ gitea_admin_email }}
     --admin
   args:
-    executable: /bin/bash
+    chdir: "{{ gitea_work_dir }}"
   become: true
   become_user: "{{ gitea_user }}"
-  when: admin_exists.stdout == "0"
+  when: admin_list.stdout is not defined or gitea_admin_user not in admin_list.stdout
   no_log: true
