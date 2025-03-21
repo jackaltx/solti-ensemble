@@ -33,7 +33,7 @@ KEY_FILE = {{ gitea_key }}
 {% endif %}
 
 [database]
-TYPE = {{ gitea_db_type }}
+DB_TYPE = {{ gitea_db_type }}
 PATH = {{ gitea_data_path }}/gitea.db
 {% if gitea_db_type != 'sqlite3' %}
 HOST = {{ gitea_db_host }}
