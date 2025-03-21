@@ -33,9 +33,15 @@
     owner: "{{ gitea_user }}"
     group: "{{ gitea_group }}"
     mode: "0750"
+    recurse: true
   loop:
     - "{{ gitea_home_path }}"
     - "{{ gitea_data_path }}"
+    - "{{ gitea_data_path }}/repositories"
+    - "{{ gitea_data_path }}/lfs"
+    - "{{ gitea_data_path }}/tmp"
+    - "{{ gitea_data_path }}/tmp/local-repo"
+    - "{{ gitea_data_path }}/tmp/uploads"
     - "{{ gitea_config_path }}"
     - "{{ gitea_log_path }}"
   become: true
