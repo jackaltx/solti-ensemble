@@ -48,6 +48,8 @@
   until: gitea_api_check.status in [200, 401, 404]
   changed_when: false
   ignore_errors: true
+  # Using delegate_to: localhost may help if there are connection issues
+  # delegate_to: localhost
 
 # Configure initial admin user if this is a fresh installation
 - name: Check if Gitea admin user exists
