@@ -1,6 +1,15 @@
 ---
 # tasks file for gitea
 
+- name: Debug variable paths
+  debug:
+    msg:
+      - "Playbook dir: {{ playbook_dir }}"
+      - "Inventory dir: {{ inventory_dir }}"
+      - "project_root: {{ inventory_dir }}"
+      - "ansible_config_file: {{ ansible_config_file }}"
+      - "gitea_db_type: {{ gitea_db_type }}"
+
 # Fix for temporary directory permissions
 - name: Ensure ansible temp directory exists with proper permissions
   ansible.builtin.file:

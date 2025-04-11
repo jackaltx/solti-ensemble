@@ -1,0 +1,28 @@
+---
+- name: Wazuh agent configure
+  hosts: inara
+  become: true
+  vars:
+    wazuh_deployment_profile: internal
+    wazuh_agent_state: configure
+
+  pre_tasks:
+    - name: Debug variable paths
+      ansible.builtin.debug:
+        msg:
+          - "Playbook dir: {{ playbook_dir }}"
+          - "Inventory dir: {{ inventory_dir }}"
+          - "project_root: {{ inventory_dir }}"
+          - "ansible_config_file: {{ ansible_config_file }}"
+
+    - name: Ensure ansible temp directory exists with proper permissions
+      become: true
+      ansible.builtin.file:
+        path: /tmp/ansible-tmp
+        state: directory
+        owner: root
+        group: root
+        mode: "0777"
+
+  roles:
+    - role: wazuh-agent

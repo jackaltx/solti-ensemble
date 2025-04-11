@@ -18,6 +18,9 @@ all:
         monitor11:
           ansible_host: 192.168.55.11 # "monitor11.{{ domain }}"
 
+        inara:
+          ansible_host: "inara.{{ domain }}"
+
       # .........................................
       # mylab vars
       vars:

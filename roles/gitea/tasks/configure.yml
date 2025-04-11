@@ -49,28 +49,35 @@
   changed_when: false
   ignore_errors: true
 
+# First ensure Gitea web service is actually running before admin commands
+- name: Check if Gitea is initialized
+  ansible.builtin.stat:
+    path: "{{ gitea_data_path }}/gitea.db"
+  register: gitea_db_file
+  when: gitea_db_type == 'sqlite3'
+
 # Configure initial admin user if this is a fresh installation
 - name: Check if Gitea admin user exists
   ansible.builtin.command: >
-    gitea admin user list
-  args:
-    chdir: "{{ gitea_work_dir }}"
+    gitea admin user list --config {{ gitea_app_ini_path }}
   register: admin_list
   become: true
   become_user: "{{ gitea_user }}"
   changed_when: false
   ignore_errors: true
+  when: gitea_db_type != 'sqlite3' or gitea_db_file.stat.exists | default(false)
 
 - name: Create Gitea admin user if not found
   ansible.builtin.command: >
     gitea admin user create 
+    --config {{ gitea_app_ini_path }}
     --username {{ gitea_admin_user }}
     --password '{{ gitea_admin_password }}'
     --email {{ gitea_admin_email }}
     --admin
-  args:
-    chdir: "{{ gitea_work_dir }}"
   become: true
   become_user: "{{ gitea_user }}"
-  when: admin_list.stdout is not defined or gitea_admin_user not in admin_list.stdout
+  when:
+    - gitea_db_type != 'sqlite3' or gitea_db_file.stat.exists | default(false)
+    - admin_list.stdout is not defined or gitea_admin_user not in admin_list.stdout
   no_log: true
