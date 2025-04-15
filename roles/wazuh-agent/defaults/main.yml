@@ -27,6 +27,16 @@ wazuh_security_modules:
   syscheck:
     enabled: yes
     frequency: 43200 # 12 hours
+    max_eps: 50 # Default, override in profiles
+    synchronization:
+      enabled: yes
+      interval: "5m" # Default, override in profiles
+      max_eps: 10 # Default, override in profiles
+    skip_settings:
+      nfs: yes
+      dev: yes
+      proc: yes
+      sys: yes
     directories:
       - path: /etc
         check_all: yes

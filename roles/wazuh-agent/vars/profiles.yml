@@ -93,15 +93,23 @@ internal_profile:
     journald_filters:
       - name: critical_errors
         enabled: yes
-        query: "PRIORITY<=3" # Emergency, Alert, Critical only
+        facility: "PRIORITY" # Emergency, Alert, Critical only
+        query: "[0-3]" # Emergency, Alert, Critical only
 
-      - name: authentication
+      - name: sshd
         enabled: yes
-        query: "SYSLOG_IDENTIFIER=sudo OR SYSLOG_IDENTIFIER=su"
+        facility: "_SYSTEMD_UNIT"
+        query: "^ssh.service$"
 
-      - name: systemd_failures
+      - name: login authentication
         enabled: yes
-        query: "UNIT=systemd.service AND PRIORITY<=4" # Include errors
+        facility: "_SYSTEMD_UNIT"
+        query: "^system-logind.service$"
+
+      - name: sudo authentication
+        enabled: yes
+        facility: "SYSLOG_IDENTIFIER"
+        query: "sudo|su"
 
     custom: [] # Define custom logs as needed
 
@@ -166,6 +174,29 @@ internet_facing_profile:
         enabled: yes
         query: "SYSLOG_IDENTIFIER=sudo OR SYSLOG_IDENTIFIER=su"
 
+      # added by Claude in next round
+      - name: kernel_security
+        enabled: yes
+        facility: "SYSLOG_IDENTIFIER"
+        query: "kernel|apparmor|selinux"
+
+      - name: network_security
+        enabled: yes
+        facility: "_SYSTEMD_UNIT"
+        # query: "NetworkManager.service|systemd-networkd.service|systemd-resolved.service"
+        # query: "systemd-networkd.service|systemd-resolved.service"
+        query: "systemd-networkd|networkd|dhclient|dhcpcd"
+
+      - name: authorization
+        enabled: yes
+        facility: "SYSLOG_IDENTIFIER"
+        query: "polkit|pam|systemd-logind"
+
+      - name: access_control
+        enabled: yes
+        facility: "_SYSTEMD_UNIT"
+        query: "auditd.service"
+
     # Define custom application logs based on deployment
     custom:
       - path: /var/log/auth.log
@@ -221,21 +252,30 @@ ispconfig_profile:
 
     # Comprehensive journald monitoring with service-specific filters
     journald_filters:
-      - name: all_errors
+      - name: critical_errors
         enabled: yes
-        query: "PRIORITY<=4" # Emergency through Error
+        facility: "PRIORITY"
+        query: "[0-4]" # Emergency, Alert, Critical, Error only
 
-      - name: web_all
-        enabled: yes
-        query: "UNIT=apache2.service OR UNIT=httpd.service OR UNIT=nginx.service"
+      # - name: web_all
+      #   enabled: yes
+      #   facility: "_SYSTEMD_UNIT"
+      #   query: "apache2.service|httpd.service|nginx.service"
 
-      - name: ssh_all
+      - name: sshd
         enabled: yes
-        query: "UNIT=sshd.service"
+        facility: "_SYSTEMD_UNIT"
+        query: "^ssh.service$"
 
-      - name: authentication
+      - name: login authentication
         enabled: yes
-        query: "SYSLOG_IDENTIFIER=sudo OR SYSLOG_IDENTIFIER=su"
+        facility: "_SYSTEMD_UNIT"
+        query: "^system-logind.service$"
+
+      - name: sudo authentication
+        enabled: yes
+        facility: "SYSLOG_IDENTIFIER"
+        query: "sudo|su"
 
     # Define custom application logs based on deployment
     custom:
@@ -258,7 +298,7 @@ ispconfig_profile:
 
       - path: /var/log/apache2/access.log
         format: apache
-        ignore_type_pcre2: 'GET /server-status\?auto HTTP/1\.1'
+        ignore_type_pcre2: "GET /server-status\\?auto HTTP/1\\.1"
         enabled: yes
 
       - path: /var/log/apache2/other_vhosts_access.log

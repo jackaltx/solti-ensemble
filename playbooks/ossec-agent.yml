@@ -5,6 +5,7 @@
   vars:
     wazuh_deployment_profile: internal
     wazuh_agent_state: configure
+    wazuh_server_address: 192.168.55.200
 
   pre_tasks:
     - name: Debug variable paths

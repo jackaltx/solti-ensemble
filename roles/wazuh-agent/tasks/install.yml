@@ -64,5 +64,7 @@
     name: "{{ wazuh_service_name }}"
     enabled: yes
     state: started
-  when: not ansible_check_mode and (agent_registered is success or agent_registered is skipped)
-##############################
+  # when: not ansible_check_mode and (agent_registered is success or agent_registered is skipped)
+  when: >
+    not ansible_check_mode and
+    (agent_registered is defined and (agent_registered is success or agent_registered is skipped))
