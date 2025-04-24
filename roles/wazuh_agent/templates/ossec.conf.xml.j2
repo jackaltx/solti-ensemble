@@ -13,6 +13,7 @@
       <port>{{ wazuh_server_port }}</port>
       <protocol>{{ wazuh_server_protocol }}</protocol>
     </server>
+    <config-profile>{{ ansible_distribution | lower }}, {{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}</config-profile>
     <crypto_method>aes</crypto_method>
     <notify_time>10</notify_time>
     <time-reconnect>60</time-reconnect>
@@ -30,7 +31,7 @@
    -->
 
   <!-- Rootcheck module -->
-  {% if wazuh_security_modules.rootcheck.enabled %}
+  {% if wazuh_security_modules.rootcheck.enabled -%}
   <rootcheck>
     <disabled>no</disabled>
     <check_files>yes</check_files>
@@ -60,7 +61,7 @@
         SMELL  Claude has version issues???
    -->
 
-  {% if wazuh_security_modules.syscheck.enabled %}
+  {% if wazuh_security_modules.syscheck.enabled -%}
   <!-- Syscheck module -->
   <syscheck>
     <disabled>no</disabled>
@@ -70,12 +71,12 @@
     <process_priority>{{ wazuh_security_modules.syscheck.process_priority }}</process_priority>
     
     <!-- Monitored directories -->
-    {% for dir in wazuh_security_modules.syscheck.directories %}
+    {% for dir in wazuh_security_modules.syscheck.directories -%}
     <directories check_all="{{ 'yes' if dir.check_all else 'no' }}">{{ dir.path }}</directories>
     {% endfor %}
 
     <!-- Ignored paths -->
-    {% for path in wazuh_security_modules.syscheck.ignore_paths %}
+    {% for path in wazuh_security_modules.syscheck.ignore_paths -%}
     <ignore>{{ path }}</ignore>
     {% endfor %}
 
@@ -109,8 +110,9 @@
 
   </syscheck>{% endif %}
 
+
   <!-- Security Configuration Assessment -->
-  {% if wazuh_security_modules.sca.enabled %}
+  {% if wazuh_security_modules.sca.enabled -%}
   <sca>
     <enabled>yes</enabled>
     <scan_on_start>yes</scan_on_start>
@@ -119,7 +121,7 @@
   </sca>
   {% endif %}
 
-  {% if wazuh_security_modules.syscollector.enabled %}
+  {% if wazuh_security_modules.syscollector.enabled -%}
   <!-- System inventory -->
 
   <wodle name="syscollector">
@@ -134,7 +136,7 @@
     <processes>yes</processes>
   </wodle>{% endif %}
 
-  {% if wazuh_security_modules.cis_cat.enabled %}
+  {% if wazuh_security_modules.cis_cat.enabled -%}
   <!-- cis_cat integration -->
   <wodle name="cis_cat">
     <disabled>no</disabled>
@@ -146,7 +148,7 @@
   </wodle>{% endif %}
 
   <!-- Osquery integration -->
-  {% if wazuh_security_modules.osquery.enabled %}
+  {% if wazuh_security_modules.osquery.enabled -%}
   <wodle name="osquery">
     <disabled>no</disabled>
     <run_daemon>yes</run_daemon>
@@ -157,14 +159,14 @@
   {% endif %}
 
   <!-- Active response -->
-  {% if wazuh_security_modules.active_response.enabled %}
+  {% if wazuh_security_modules.active_response.enabled -%}
   <active-response>
     <disabled>no</disabled>
     <ca_store>etc/wpk_root.pem</ca_store>
     <ca_verification>yes</ca_verification>
   </active-response>
   
-  {% if wazuh_security_modules.active_response.block_malicious %}
+  {% if wazuh_security_modules.active_response.block_malicious -%}
   <command>
     <name>firewall-drop</name>
     <executable>firewall-drop.sh</executable>
@@ -186,7 +188,7 @@
   -->
 
   <!-- System logs JKL -->
-  {% if merged_log_monitoring.system.journald %}
+  {% if merged_log_monitoring.system.journald -%}
   <localfile>
     <location>journald</location>
     <log_format>journald</log_format>
@@ -219,55 +221,55 @@
   </localfile>
   {% endif %}
 
-  <!-- Web server logs -->
+  <!-- Web server logs (default only, not for ispconfig)-->
 
-  {% if merged_log_monitoring.web.apache_access and discovered_services.web.apache %}
+  {% if merged_log_monitoring.web.apache_access and discovered_services.web.apache -%}
   <localfile>
     <log_format>apache</log_format>
     <location>{{ log_locations.apache_access }}</location>
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.web.apache_error and discovered_services.web.apache %}
+  {% if merged_log_monitoring.web.apache_error and discovered_services.web.apache -%}
   <localfile>
     <log_format>apache_error</log_format>
     <location>{{ log_locations.apache_error }}</location>
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.web.nginx_access and discovered_services.web.nginx %}
+  {% if merged_log_monitoring.web.nginx_access and discovered_services.web.nginx -%}
   <localfile>
     <log_format>nginx</log_format>
     <location>{{ log_locations.nginx_access }}</location>
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.web.nginx_error and discovered_services.web.nginx %}
+  {% if merged_log_monitoring.web.nginx_error and discovered_services.web.nginx -%}
   <localfile>
     <log_format>syslog</log_format>
     <location>{{ log_locations.nginx_error }}</location>
   </localfile>
   {% endif %}
  
- <!-- Database logs -->
+  <!-- Database logs (default only, will work for )-->
 
-  {% if merged_log_monitoring.database.mysql and discovered_services.database.mysql %}
+  {% if merged_log_monitoring.database.mysql and discovered_services.database.mysql -%}
   <localfile>
     <log_format>syslog</log_format>
     <location>{{ log_locations.mysql }}</location>
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.database.postgresql and discovered_services.database.postgresql %}
+  {% if merged_log_monitoring.database.postgresql and discovered_services.database.postgresql -%}
   <localfile>
     <log_format>postgresql</log_format>
     <location>{{ log_locations.postgresql }}</location>
   </localfile>
   {% endif %}
 
-  <!-- Command monitoring -->
+  <!-- Command monitoring (not tested and may never be used by me)-->
 
-  {% if merged_log_monitoring.commands.disk_space %}
+  {% if merged_log_monitoring.commands.disk_space -%}
   <localfile>
     <log_format>command</log_format>
     <command>df -h</command>
@@ -275,7 +277,7 @@
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.commands.network_ports %}
+  {% if merged_log_monitoring.commands.network_ports -%}
   <localfile>
     <log_format>full_command</log_format>
     <command>netstat -tulpn | grep LISTEN | sort</command>
@@ -283,7 +285,7 @@
   </localfile>
   {% endif %}
 
-  {% if merged_log_monitoring.commands.last_logins %}
+  {% if merged_log_monitoring.commands.last_logins -%}
 
   <localfile>
     <log_format>full_command</log_format>
@@ -293,7 +295,7 @@
 
   {% endif %}
 
-  {% if merged_log_monitoring.commands.open_files %}
+  {% if merged_log_monitoring.commands.open_files -%}
 
   <localfile>
     <log_format>full_command</log_format>
@@ -303,7 +305,7 @@
 
   {% endif %}
 
-  {% if merged_log_monitoring.commands.process_list %}
+  {% if merged_log_monitoring.commands.process_list -%}
 
   <localfile>
     <log_format>full_command</log_format>
@@ -315,7 +317,7 @@
 
   <!-- Custom log files -->
 
-  {% for log in merged_log_monitoring.custom %}
+  {% for log in merged_log_monitoring.custom -%}
   {% if log.enabled %}
   <localfile>
     <log_format>{{ log.format }}</log_format>

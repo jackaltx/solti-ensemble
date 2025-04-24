@@ -67,6 +67,7 @@
   failed_when: false
   when: wazuh_container_monitoring.detect_docker | bool
 
+# ====================================================================================================================
 # Set discovered service variables
 - name: Set discovered service variables
   set_fact:
@@ -102,6 +103,7 @@
       - "Recommended log monitoring configuration: {{ recommended_log_monitoring | to_nice_yaml }}"
   when: wazuh_agent_state == "present"
 
+# ====================================================================================================================
 # Add container-specific syscheck exclusions if containers detected
 - name: Add container paths to syscheck ignores
   set_fact:

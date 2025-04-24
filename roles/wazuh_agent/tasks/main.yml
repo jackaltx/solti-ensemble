@@ -27,24 +27,14 @@
     # Set profile-based variables if profile is specified
     # NOTE: This is where the "working profile" is set.
 
-    # - name: Set variables based on deployment profile
-    #   set_fact:
-    #     wazuh_security_modules: "{{ lookup('vars', wazuh_deployment_profile + '_profile').wazuh_security_modules }}"
-    #     wazuh_log_monitoring: "{{ lookup('vars', wazuh_deployment_profile + '_profile').wazuh_log_monitoring }}"
-    #   when: wazuh_deployment_profile is defined and wazuh_deployment_profile in ['isolated', 'internal', 'internet_facing']
-
     - name: Set variables based on deployment profile
       set_fact:
         wazuh_security_modules: "{{ wazuh_security_modules | combine(lookup('vars', wazuh_deployment_profile + '_profile').wazuh_security_modules, recursive=True) }}"
         wazuh_log_monitoring: "{{ wazuh_log_monitoring | combine(lookup('vars', wazuh_deployment_profile + '_profile').wazuh_log_monitoring, recursive=True) }}"
-      when: wazuh_deployment_profile is defined and wazuh_deployment_profile in ['isolated', 'internal', 'internet_facing']
+      when: wazuh_deployment_profile is defined and wazuh_deployment_profile in ['isolated', 'internal', 'internet_facing','ispconfig']
 
     # Install the package (idempotent)
     # TODO SMELL this calls agent-auth, make sure it bypasses that on an configure only run
-
-    # Claude SMELL FIXME TODO  if the previous configure run leaves wazuh-agent broken, then
-    #     it fails on in the install !!!!  It needs to check then agent is installed and just configure.
-    #
 
     - name: Install Wazuh agent
       include_tasks: install.yml
