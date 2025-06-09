@@ -1,3 +1,129 @@
+#!/bin/bash
+
+# ISPConfig3 Database BOM (Bill of Materials) Audit Script
+# Extracts what ISPConfig thinks exists from the database
+# Compatible with ispconfig-audit.sh command line interface
+
+SCRIPT_VERSION="2.1"
+AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+HOSTNAME=$(hostname)
+
+# Default values
+AUDIT_DIR=""
+RETAIN_COMMITS=""
+OUTPUT_FILENAME="ispconfig-bom-config.json"
+
+# Usage function
+usage() {
+    echo "Usage: $0 -d <audit_directory> [--retain <number>]"
+    echo ""
+    echo "Options:"
+    echo "  -d <directory>    Directory to store audit reports (required)"
+    echo "  --retain <number> Keep only the last N commits (optional, for development)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -d /opt/audit/ispconfig-bom-audit                    # Production mode (keep all history)"
+    echo "  $0 -d /opt/audit/ispconfig-bom-audit --retain 20       # Development mode (keep last 20 commits)"
+    exit 1
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d)
+            AUDIT_DIR="$2"
+            shift 2
+            ;;
+        --retain)
+            RETAIN_COMMITS="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "ERROR: Unknown option $1" >&2
+            usage
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$AUDIT_DIR" ]]; then
+    echo "ERROR: Audit directory (-d) is required" >&2
+    usage
+fi
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   echo "ERROR: This script must be run as root" >&2
+   exit 1
+fi
+
+# Check if Python3 and required modules are available
+check_dependencies() {
+    if ! command -v python3 &> /dev/null; then
+        echo "ERROR: Python3 is required but not found" >&2
+        exit 1
+    fi
+    
+    if ! python3 -c "import pymysql" &> /dev/null; then
+        echo "ERROR: Python3 pymysql module is required but not found" >&2
+        echo "Install with: apt-get install python3-pymysql" >&2
+        exit 1
+    fi
+}
+
+# Setup audit directory and git repo
+setup_audit_repo() {
+    echo "Setting up BOM audit repository at: $AUDIT_DIR"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$AUDIT_DIR"
+    cd "$AUDIT_DIR"
+    
+    # Initialize git repo if not exists
+    if [[ ! -d ".git" ]]; then
+        git init
+        git config user.name "ISPConfig BOM Audit"
+        git config user.email "bom-audit@$(hostname)"
+        echo "Initialized new git repository for BOM audit tracking"
+    fi
+}
+
+# Apply retention policy
+apply_retention() {
+    if [[ -n "$RETAIN_COMMITS" ]]; then
+        echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
+        cd "$AUDIT_DIR"
+        
+        # Count current commits
+        COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+        
+        if [[ $COMMIT_COUNT -gt $RETAIN_COMMITS ]]; then
+            # Create orphan branch with recent history
+            CUTOFF_COMMIT=$(git rev-list HEAD | sed -n "${RETAIN_COMMITS}p")
+            
+            # Create new branch from the cutoff point
+            git checkout --orphan temp_branch "$CUTOFF_COMMIT"
+            git commit -m "Retention policy: keeping last $RETAIN_COMMITS commits from $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            
+            # Replace main branch
+            git branch -M temp_branch main 2>/dev/null || git branch -M temp_branch master
+            
+            # Cleanup
+            git gc --aggressive --prune=all
+            
+            echo "Retention applied: pruned old commits, keeping last $RETAIN_COMMITS"
+        else
+            echo "Retention policy: $COMMIT_COUNT commits (under limit of $RETAIN_COMMITS)"
+        fi
+    fi
+}
+
+# Generate the Python BOM script inline
+generate_python_script() {
+    cat > /tmp/ispconfig-bom-extractor.py << 'PYTHON_SCRIPT_EOF'
 #!/usr/bin/env python3
 """
 ISPConfig Database Inventory Script
@@ -9,7 +135,6 @@ import json
 import sys
 import pymysql
 from datetime import datetime
-import argparse
 import logging
 import os
 import re
@@ -34,10 +159,10 @@ class ISPConfigInventory:
                 
                 # Extract database configuration using regex patterns
                 patterns = {
-                    'host': r"\$conf\['db'\]\['host'\]\s*=\s*['\"]([^'\"]+)['\"]",
-                    'user': r"\$conf\['db'\]\['user'\]\s*=\s*['\"]([^'\"]+)['\"]", 
-                    'password': r"\$conf\['db'\]\['password'\]\s*=\s*['\"]([^'\"]*)['\"]",
-                    'database': r"\$conf\['db'\]\['database'\]\s*=\s*['\"]([^'\"]+)['\"]"
+                    'host': r"\$conf\['db_host'\]\s*=\s*['\"]([^'\"]+)['\"]",
+                    'user': r"\$conf\['db_user'\]\s*=\s*['\"]([^'\"]+)['\"]", 
+                    'password': r"\$conf\['db_password'\]\s*=\s*['\"]([^'\"]*)['\"]",
+                    'database': r"\$conf\['db_database'\]\s*=\s*['\"]([^'\"]+)['\"]"
                 }
                 
                 for key, pattern in patterns.items():
@@ -330,7 +455,12 @@ class ISPConfigInventory:
                 'metadata': {
                     'timestamp': datetime.utcnow().isoformat() + 'Z',
                     'source': 'ispconfig_database',
-                    'version': '1.0'
+                    'version': '1.0',
+                    'audit_info': {
+                        'version': '2.1',
+                        'hostname': os.uname().nodename,
+                        'purpose': 'ISPConfig Database BOM Audit'
+                    }
                 },
                 'web_domains': self.get_web_domains(),
                 'mail_domains': self.get_mail_domains(),
@@ -351,41 +481,29 @@ class ISPConfigInventory:
                 'total_dns_zones': inventory['dns_zones']['total_count']
             }
             
-            logger.info("Inventory generation completed successfully")
+            logger.info("BOM inventory generation completed successfully")
             return inventory
             
         except Exception as e:
-            logger.error(f"Inventory generation failed: {e}")
+            logger.error(f"BOM inventory generation failed: {e}")
             return None
         finally:
             self.close()
 
-def main():
-    parser = argparse.ArgumentParser(description='Generate ISPConfig database inventory')
-    parser.add_argument('--host', help='Database host (or set ISPCONFIG_DB_HOST)')
-    parser.add_argument('--user', help='Database user (or set ISPCONFIG_DB_USER)')
-    parser.add_argument('--database', help='Database name (or set ISPCONFIG_DB_NAME)')
-    parser.add_argument('--config', default='/usr/local/ispconfig/server/lib/config.inc.php',
-                       help='ISPConfig config file path')
-    parser.add_argument('-d', help='Output JSON file (default: stdout)')
-    parser.add_argument('--pretty', action='store_true', help='Pretty print JSON')
-    
-    # Remove password argument - use environment or config file only
-    args = parser.parse_args()
-    
+def main(output_file):
     # Create inventory instance (password will be read from env or config)
     inventory_tool = ISPConfigInventory(
-        host=args.host,
-        user=args.user,
-        password=None,  # Force reading from env/config
-        database=args.database
+        host=None,
+        user=None,
+        password=None,
+        database=None
     )
     
     # Generate inventory
     inventory = inventory_tool.generate_inventory()
     
     if inventory is None:
-        logger.error("Failed to generate inventory")
+        logger.error("Failed to generate BOM inventory")
         logger.error("\nCredential troubleshooting:")
         logger.error("1. Check ISPConfig config: /usr/local/ispconfig/server/lib/config.inc.php")
         logger.error("2. Set environment: export ISPCONFIG_DB_PASSWORD='your_password'")
@@ -393,14 +511,100 @@ def main():
         sys.exit(1)
     
     # Output results
-    json_output = json.dumps(inventory, indent=2 if args.pretty else None, default=str)
+    json_output = json.dumps(inventory, indent=2, default=str)
     
-    if args.output:
-        with open(args.output, 'w') as f:
-            f.write(json_output)
-        logger.info(f"Inventory saved to {args.output}")
-    else:
-        print(json_output)
+    with open(output_file, 'w') as f:
+        f.write(json_output)
+    
+    logger.info(f"BOM inventory saved to {output_file}")
+    return True
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) != 2:
+        print("Usage: python3 script.py <output_file>", file=sys.stderr)
+        sys.exit(1)
+    
+    success = main(sys.argv[1])
+    sys.exit(0 if success else 1)
+PYTHON_SCRIPT_EOF
+}
+
+# Finalize git tracking
+finalize_audit() {
+    cd "$AUDIT_DIR"
+    
+    # Check if there are any changes
+    if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
+        echo "No BOM configuration changes detected since last audit"
+        COMMIT_MSG="BOM audit $AUDIT_DATE - No changes"
+        git add "$OUTPUT_FILENAME" 2>/dev/null || true
+        git commit --allow-empty -m "$COMMIT_MSG" >/dev/null 2>&1
+    else
+        echo "BOM configuration changes detected - committing to audit history"
+        if git rev-parse --verify HEAD >/dev/null 2>&1; then
+            echo "Summary of changes:"
+            git diff --stat "$OUTPUT_FILENAME" 2>/dev/null || echo "  (New BOM configuration file)"
+        fi
+        COMMIT_MSG="BOM audit $AUDIT_DATE"
+        git add "$OUTPUT_FILENAME"
+        git commit -m "$COMMIT_MSG" >/dev/null 2>&1
+    fi
+    
+    # Apply retention policy after committing
+    apply_retention
+    
+    echo ""
+    echo "BOM Audit History Summary:"
+    echo "- Repository: $AUDIT_DIR"
+    echo "- Total commits: $(git rev-list --count HEAD 2>/dev/null || echo "1")"
+    if [[ -n "$RETAIN_COMMITS" ]]; then
+        echo "- Retention policy: Last $RETAIN_COMMITS commits"
+    else
+        echo "- Retention policy: Keep all history (production mode)"
+    fi
+}
+
+# Main execution
+echo "Starting ISPConfig3 Database BOM Audit..."
+
+# Check dependencies
+check_dependencies
+
+# Setup the audit repository
+setup_audit_repo
+
+OUTPUT_FILE="$AUDIT_DIR/$OUTPUT_FILENAME"
+echo "Output file: $OUTPUT_FILE"
+
+# Generate the Python script
+generate_python_script
+
+# Run the Python BOM extractor
+echo "Extracting ISPConfig database inventory..."
+if python3 /tmp/ispconfig-bom-extractor.py "$OUTPUT_FILE"; then
+    echo "BOM audit completed successfully!"
+    echo "Report saved to: $OUTPUT_FILE"
+    echo ""
+    echo "Quick Summary:"
+    echo "- BOM inventory extracted from ISPConfig database"
+    echo "- JSON report includes: web domains, mail domains, users, databases, clients, DNS zones"
+    
+    # Read some summary stats from the generated JSON
+    if command -v jq &> /dev/null; then
+        echo "- Total web domains: $(jq -r '.summary.total_web_domains // "unknown"' "$OUTPUT_FILE")"
+        echo "- Total mail users: $(jq -r '.summary.total_mail_users // "unknown"' "$OUTPUT_FILE")"
+        echo "- Total databases: $(jq -r '.summary.total_databases // "unknown"' "$OUTPUT_FILE")"
+        echo "- Total clients: $(jq -r '.summary.total_clients // "unknown"' "$OUTPUT_FILE")"
+    fi
+else
+    echo "ERROR: BOM audit failed" >&2
+    # Clean up temporary files
+    rm -f /tmp/ispconfig-bom-extractor.py
+    exit 1
+fi
+
+# Clean up temporary files
+rm -f /tmp/ispconfig-bom-extractor.py
+
+# Finalize git tracking and apply retention
+finalize_audit
