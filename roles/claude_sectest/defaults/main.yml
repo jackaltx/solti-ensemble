@@ -1,0 +1,22 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Default variables for claude_sectest role
+
+# Script installation path
+audit_script_path: /usr/local/bin/ispconfig-audit.sh
+
+# Audit output directory on remote host
+audit_directory: /opt/audit/ispconfig-audit
+
+# Audit output filename
+audit_output_filename: ispconfig-config.json
+
+# Local directory to store fetched audit results
+audit_local_directory: ~/
+
+# Optional: Set retention policy (number of commits to keep)
+# Leave undefined or set to 0 for production mode (keep all history)
+# audit_retention_commits: 20
+
+# Display audit script output and git history
+audit_show_output: true
