@@ -1,0 +1,74 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for sshd_harden
+
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Generate RSA 4096 key pair for root
+  community.crypto.openssh_keypair:
+    path: /root/.ssh/id_rsa
+    type: rsa
+    size: 4096
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+
+- name: Generate ED25519 key pair for root
+  community.crypto.openssh_keypair:
+    path: /root/.ssh/id_ed25519
+    type: ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+
+- name: Ensure sshd_config.d directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy SSH hardening configuration
+  ansible.builtin.copy:
+    src: solti.conf
+    dest: /etc/ssh/sshd_config.d/01-solti.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: restart sshd
+
+- name: Filter weak DH moduli (keep only >= 3071 bits)
+  ansible.builtin.shell:
+    cmd: |
+      if [ -f /etc/ssh/moduli ]; then
+        awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.tmp && \
+        mv /etc/ssh/moduli.tmp /etc/ssh/moduli
+      fi
+    creates: /etc/ssh/moduli.filtered
+  register: moduli_result
+  notify: restart sshd
+
+- name: Create moduli filter marker file
+  ansible.builtin.file:
+    path: /etc/ssh/moduli.filtered
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  when: moduli_result is changed
+
+- name: Validate SSH configuration
+  ansible.builtin.command:
+    cmd: /usr/sbin/sshd -t
+  changed_when: false
+  check_mode: false

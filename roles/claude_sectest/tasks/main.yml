@@ -1,0 +1,61 @@
+#SPDX-License-Identifier: MIT-0
+---
+#
+# Task file for claude_sectest
+
+# Claude: Promnpt
+#
+# write a modules to do the following
+# assume it will be run as root
+# copy the file: ispconfig-audit.sh to the remote in /usr/local/bin/  as executable.
+# Run the secript  /usr/local/bin/ispconfig-autid.sh -d /opt/audit/ispconfig-audit
+# transfer the output from the remote at /opt/audit/ispconfig-audit/ispconfig-config.json  to my local machine at "~/{{ ansible host }}-ispconfig-audit-{{ epoch time }}.json"
+
+# This is an adaptation by jack to use the script command to transfer and
+# execute a local script on a remote machine.
+
+# .......................................................................
+#
+- name: Run the audit script
+  ansible.builtin.script:
+    cmd: "../files/{{ audit_script_filename }} -d {{ audit_directory }} --retain {{ audit_retention_commits }}"
+  register: audit_cmd_runtime_output
+
+- name: Print Audit runtime output
+  ansible.builtin.debug:
+    var: audit_cmd_runtime_output
+
+# .......................................................................
+#
+- name: Check if audit output file exists
+  ansible.builtin.stat:
+    path: "{{ audit_directory }}/{{ audit_output_filename }}"
+  register: audit_output_file
+
+- name: Fail if audit output file not found
+  ansible.builtin.fail:
+    msg: "Audit output file not found at {{ audit_directory }}/{{ audit_output_filename }}"
+  when: not audit_output_file.stat.exists
+
+- name: Generate timestamp for local filename
+  ansible.builtin.set_fact:
+    audit_timestamp: "{{ ansible_date_time.epoch }}"
+
+- name: Create local audit results directory
+  local_action:
+    module: file
+    path: "{{ audit_local_directory }}"
+    state: directory
+    mode: "0755"
+  run_once: true
+
+- name: Fetch audit results to local machine
+  ansible.builtin.fetch:
+    src: "{{ audit_directory }}/{{ audit_output_filename }}"
+    dest: "{{ audit_local_directory }}/{{ inventory_hostname }}-{{ audit_output_filename_root }}-{{ audit_timestamp }}.json"
+    flat: yes
+  when: audit_output_file.stat.exists
+
+- name: Display local file location
+  ansible.builtin.debug:
+    msg: "Audit results saved to: {{ audit_local_directory }}/{{ inventory_hostname }}-{{ audit_output_filename_root}}-{{ audit_timestamp }}.json"
