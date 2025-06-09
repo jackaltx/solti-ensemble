@@ -4,7 +4,7 @@
 # Validates SPF, DKIM, DMARC, and MX records for domains
 # Output: JSON with Git-based change tracking and retention management
 
-SCRIPT_VERSION="1.02"
+SCRIPT_VERSION="1.03"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
 
@@ -151,7 +151,8 @@ get_ispconfig_domains() {
     if command -v mysql &> /dev/null; then
         while IFS= read -r domain; do
             [[ -n "$domain" ]] && domains+=("$domain")
-        done < <(mysql -N -e "SELECT DISTINCT domain FROM mail_domain WHERE active='y' UNION SELECT DISTINCT domain FROM web_domain WHERE active='y' AND parent_domain_id=0;" dbispconfig 2>/dev/null || echo "")
+        # done < <(mysql -N -e "SELECT DISTINCT domain FROM mail_domain WHERE active='y' UNION SELECT DISTINCT domain FROM web_domain WHERE active='y' AND parent_domain_id=0;" dbispconfig 2>/dev/null || echo "")
+        done < <(mysql -N -e "SELECT DISTINCT domain FROM mail_domain WHERE active='y';" dbispconfig 2>/dev/null)
     fi
     
     # If database query failed, try to find domains from existing BOM audit
