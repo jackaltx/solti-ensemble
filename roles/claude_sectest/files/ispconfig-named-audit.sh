@@ -4,7 +4,7 @@
 # Validates SPF, DKIM, DMARC, and MX records for domains
 # Output: JSON with Git-based change tracking and retention management
 
-SCRIPT_VERSION="1.01"
+SCRIPT_VERSION="1.02"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
 
@@ -237,13 +237,13 @@ test_spf() {
         spf_status="pass"
         
         # Parse SPF mechanisms
-        IFS=' ' read -ra mechanisms <<< "$spf_record"
+        IFS=' ' read -ra mechanisms <<< "$spf_record"     
         for mechanism in "${mechanisms[@]}"; do
             case "$mechanism" in
                 v=spf1) ;;  # Version, skip
                 ~all|-all|+all|?all) spf_mechanisms+=("$mechanism") ;;
-                include:*|a:*|mx:*|ip4:*|ip6:*|exists:*|redirect:*) spf_mechanisms+=("$mechanism") ;;
                 mx|a) spf_mechanisms+=("$mechanism") ;;  # Standalone mx and a mechanisms
+                include:*|a:*|mx:*|ip4:*|ip6:*|exists:*|redirect:*) spf_mechanisms+=("$mechanism") ;;
                 *) spf_errors+=("Unknown mechanism: $mechanism") ;;
             esac
         done
