@@ -11,73 +11,35 @@
 # Run the secript  /usr/local/bin/ispconfig-autid.sh -d /opt/audit/ispconfig-audit
 # transfer the output from the remote at /opt/audit/ispconfig-audit/ispconfig-config.json  to my local machine at "~/{{ ansible host }}-ispconfig-audit-{{ epoch time }}.json"
 
-# .......................................................................
-- name: Ensure /usr/local/bin directory exists
-  file:
-    path: /usr/local/bin
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-
-- name: Copy ispconfig-audit.sh script to remote host
-  copy:
-    src: ispconfig-audit.sh
-    dest: "{{ audit_script_path }}"
-    mode: "0755"
-    owner: root
-    group: root
-    backup: yes
-  register: script_copy
-
-- name: Ensure audit directory exists
-  file:
-    path: "{{ audit_directory }}"
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-
-- name: Install git (required for audit script)
-  package:
-    name: git
-    state: present
-
-- name: Build audit command with optional retention policy
-  set_fact:
-    audit_command: >-
-      {{ audit_script_path }} -d {{ audit_directory }}
-      {%- if audit_retention_commits is defined and audit_retention_commits | int > 0 %}
-       --retain {{ audit_retention_commits }}
-      {%- endif %}
+# This is an adaptation by jack to use the script command to transfer and
+# execute a local script on a remote machine.
 
 # .......................................................................
-- name: Run ISPConfig security audit script
-  command: "{{ audit_command }}"
-  register: audit_result
-  changed_when: true
-  become: yes
+#
+- name: Run database inventory
+  become: true
+  ansible.builtin.script:
+    cmd: "../files/{{ audit_script_filename }} -d {{ audit_directory }} --retain {{ audit_retention_commits }}"
+  register: audit_cmd_runtime_output
 
-- name: Display audit script output
-  debug:
-    var: audit_result.stdout_lines
-  when:
-    - audit_result.stdout_lines is defined
-    - audit_show_output | bool
+- name: Print Audit runtime output
+  ansible.builtin.debug:
+    var: audit_cmd_runtime_output
 
 # .......................................................................
+#
 - name: Check if audit output file exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ audit_directory }}/{{ audit_output_filename }}"
   register: audit_output_file
 
 - name: Fail if audit output file not found
-  fail:
+  ansible.builtin.fail:
     msg: "Audit output file not found at {{ audit_directory }}/{{ audit_output_filename }}"
   when: not audit_output_file.stat.exists
 
 - name: Generate timestamp for local filename
-  set_fact:
+  ansible.builtin.set_fact:
     audit_timestamp: "{{ ansible_date_time.epoch }}"
 
 - name: Create local audit results directory
@@ -86,33 +48,15 @@
     path: "{{ audit_local_directory }}"
     state: directory
     mode: "0755"
-  when: audit_local_directory != "~/"
   run_once: true
 
 - name: Fetch audit results to local machine
-  fetch:
+  ansible.builtin.fetch:
     src: "{{ audit_directory }}/{{ audit_output_filename }}"
-    dest: "{{ audit_local_directory }}/{{ inventory_hostname }}-ispconfig-audit-{{ audit_timestamp }}.json"
+    dest: "{{ audit_local_directory }}/{{ inventory_hostname }}-{{ audit_output_filename_root }}-{{ audit_timestamp }}.json"
     flat: yes
   when: audit_output_file.stat.exists
 
 - name: Display local file location
-  debug:
-    msg: "Audit results saved to: {{ audit_local_directory }}/{{ inventory_hostname }}-ispconfig-audit-{{ audit_timestamp }}.json"
-#
-
-# - name: Show git history summary when retention is enabled
-#   command: "git -C {{ audit_directory }} log --oneline -10"
-#   register: git_history
-#   ignore_errors: true
-#   when: audit_retention_commits is defined
-
-# - name: Display git history
-#   debug:
-#     msg: |
-#       Recent audit history:
-#       {{ git_history.stdout }}
-#   when:
-#     - audit_retention_commits is defined
-#     - git_history is succeeded
-#     - audit_show_output | bool
+  ansible.builtin.debug:
+    msg: "Audit results saved to: {{ audit_local_directory }}/{{ inventory_hostname }}-{{ audit_output_filename_root}}-{{ audit_timestamp }}.json"

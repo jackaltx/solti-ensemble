@@ -3,7 +3,7 @@
 # Default variables for claude_sectest role
 
 # Script installation path
-audit_script_path: /usr/local/bin/ispconfig-audit.sh
+audit_script_filename: ispconfig-audit.sh
 
 # Audit output directory on remote host
 audit_directory: /opt/audit/ispconfig-audit
@@ -12,11 +12,15 @@ audit_directory: /opt/audit/ispconfig-audit
 audit_output_filename: ispconfig-config.json
 
 # Local directory to store fetched audit results
-audit_local_directory: ~/
+audit_local_directory: ~/audit
 
-# Optional: Set retention policy (number of commits to keep)
 # Leave undefined or set to 0 for production mode (keep all history)
-# audit_retention_commits: 20
+audit_retention_commits: 0
 
 # Display audit script output and git history
 audit_show_output: true
+
+# Script execution method: 'script' (recommended) or 'copy_and_run'
+# 'script' method transfers and executes in one step
+# 'copy_and_run' method copies script first, then executes (legacy method)
+audit_execution_method: script
