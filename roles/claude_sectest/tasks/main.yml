@@ -16,8 +16,7 @@
 
 # .......................................................................
 #
-- name: Run database inventory
-  become: true
+- name: Run the audit script
   ansible.builtin.script:
     cmd: "../files/{{ audit_script_filename }} -d {{ audit_directory }} --retain {{ audit_retention_commits }}"
   register: audit_cmd_runtime_output

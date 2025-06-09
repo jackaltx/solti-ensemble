@@ -208,13 +208,18 @@ class ISPConfigInventory:
             return []
     
     def get_web_domains(self):
+        """Extract website domains and configurations with hierarchical structure"""
         query = """
         SELECT 
             w.domain_id, w.domain, w.document_root, w.active, w.type, w.parent_domain_id,
             w.redirect_type, w.redirect_path, w.ssl, w.ssl_letsencrypt,
             w.apache_directives, w.nginx_directives, w.php_open_basedir, w.custom_php_ini,
             w.rewrite_rules, w.proxy_directives, w.vhost_type, w.php, w.subdomain,
-            w.directive_snippets_id, c.company_name as client_name, c.client_id,
+            w.directive_snippets_id, w.system_user, w.system_group, w.hd_quota,
+            w.traffic_quota, w.cgi, w.ssi, w.suexec, w.perl, w.python, w.ruby,
+            w.ssl_state, w.ssl_locality, w.ssl_organisation, w.ssl_country,
+            w.allow_override, w.stats_type, w.backup_interval, w.backup_copies,
+            c.company_name as client_name, c.client_id,
             parent.domain as parent_domain_name
         FROM web_domain w
         LEFT JOIN client c ON w.sys_groupid = c.sys_groupid
@@ -224,16 +229,29 @@ class ISPConfigInventory:
         domains = self.execute_query(query)
         logger.info(f"Found {len(domains)} web domains")
         
-        main_domains = []
-        subdomains = []
-        alias_domains = []
+        # Build hierarchical structure
+        main_domains = {}
+        all_domains_flat = []
+        
         directive_analysis = {
             'apache_directives_count': 0, 'nginx_directives_count': 0,
             'php_custom_count': 0, 'rewrite_rules_count': 0,
             'proxy_directives_count': 0, 'php_basedir_count': 0
         }
         
+        security_analysis = {
+            'ssl_enabled_count': 0, 'letsencrypt_count': 0,
+            'suexec_disabled_count': 0, 'cgi_enabled_count': 0,
+            'custom_directives_count': 0, 'redirect_domains_count': 0
+        }
+        
+        # First pass: categorize and analyze all domains
         for domain in domains:
+            # Determine domain category and relevant fields
+            domain_category = self._categorize_domain(domain)
+            domain['domain_category'] = domain_category
+            
+            # Add directive analysis flags
             domain['has_apache_directives'] = bool(domain['apache_directives'] and domain['apache_directives'].strip())
             domain['has_nginx_directives'] = bool(domain['nginx_directives'] and domain['nginx_directives'].strip())
             domain['has_php_custom'] = bool(domain['custom_php_ini'] and domain['custom_php_ini'].strip())
@@ -241,6 +259,13 @@ class ISPConfigInventory:
             domain['has_proxy_directives'] = bool(domain['proxy_directives'] and domain['proxy_directives'].strip())
             domain['has_php_basedir'] = bool(domain['php_open_basedir'] and domain['php_open_basedir'].strip())
             
+            # Add security flags
+            domain['ssl_enabled'] = domain['ssl'] == 'y'
+            domain['letsencrypt_enabled'] = domain['ssl_letsencrypt'] == 'y'
+            domain['suexec_enabled'] = domain['suexec'] == 'y'
+            domain['has_redirects'] = bool(domain['redirect_type'] and domain['redirect_type'] != '')
+            
+            # Count directive usage
             if domain['has_apache_directives']:
                 directive_analysis['apache_directives_count'] += 1
             if domain['has_nginx_directives']:
@@ -254,32 +279,164 @@ class ISPConfigInventory:
             if domain['has_php_basedir']:
                 directive_analysis['php_basedir_count'] += 1
             
+            # Count security indicators
+            if domain['ssl_enabled']:
+                security_analysis['ssl_enabled_count'] += 1
+            if domain['letsencrypt_enabled']:
+                security_analysis['letsencrypt_count'] += 1
+            if not domain['suexec_enabled']:
+                security_analysis['suexec_disabled_count'] += 1
+            if domain['cgi'] == 'y':
+                security_analysis['cgi_enabled_count'] += 1
+            if domain['has_redirects']:
+                security_analysis['redirect_domains_count'] += 1
+            if (domain['has_apache_directives'] or domain['has_nginx_directives'] or 
+                domain['has_php_custom'] or domain['has_rewrite_rules']):
+                security_analysis['custom_directives_count'] += 1
+            
+            # Filter fields relevant to domain type
+            domain['relevant_fields'] = self._get_relevant_fields(domain_category)
+            domain['inherited_from_parent'] = self._check_inheritance(domain)
+            
+            all_domains_flat.append(domain)
+            
+            # Build hierarchical structure
+            if domain_category == 'main_domain':
+                domain['subdomains'] = []
+                domain['aliases'] = []
+                domain['redirects'] = []
+                main_domains[domain['domain_id']] = domain
+        
+        # Second pass: attach children to parents
+        for domain in all_domains_flat:
             if domain['parent_domain_id'] and domain['parent_domain_id'] > 0:
-                domain['domain_category'] = 'subdomain'
-                subdomains.append(domain)
-            elif domain['type'] == 'alias':
-                domain['domain_category'] = 'alias'
-                alias_domains.append(domain)
-            else:
-                domain['domain_category'] = 'main'
-                main_domains.append(domain)
+                parent_id = domain['parent_domain_id']
+                if parent_id in main_domains:
+                    category = domain['domain_category']
+                    if category == 'subdomain':
+                        main_domains[parent_id]['subdomains'].append(domain)
+                    elif category == 'alias_domain':
+                        main_domains[parent_id]['aliases'].append(domain)
+                    elif category == 'redirect':
+                        main_domains[parent_id]['redirects'].append(domain)
+        
+        # Calculate hierarchy statistics
+        hierarchy_stats = {
+            'main_domains_count': len(main_domains),
+            'subdomains_count': sum(len(d['subdomains']) for d in main_domains.values()),
+            'aliases_count': sum(len(d['aliases']) for d in main_domains.values()),
+            'redirects_count': sum(len(d['redirects']) for d in main_domains.values()),
+            'domains_with_children': len([d for d in main_domains.values() 
+                                        if len(d['subdomains']) + len(d['aliases']) + len(d['redirects']) > 0])
+        }
         
         return {
-            'total_count': len(domains),
-            'active_count': len([d for d in domains if d['active'] == 'y']),
-            'ssl_enabled_count': len([d for d in domains if d['ssl'] == 'y']),
-            'letsencrypt_count': len([d for d in domains if d['ssl_letsencrypt'] == 'y']),
-            'main_domains_count': len(main_domains),
-            'subdomains_count': len(subdomains),
-            'alias_domains_count': len(alias_domains),
+            'total_count': len(all_domains_flat),
+            'active_count': len([d for d in all_domains_flat if d['active'] == 'y']),
+            'hierarchy_statistics': hierarchy_stats,
             'directive_analysis': directive_analysis,
-            'domains': domains,
-            'categorized_domains': {
-                'main_domains': main_domains,
-                'subdomains': subdomains, 
-                'alias_domains': alias_domains
-            }
+            'security_analysis': security_analysis,
+            'main_domains': list(main_domains.values()),
+            'all_domains_flat': all_domains_flat,
+            'domain_relationships': self._analyze_relationships(main_domains)
         }
+    
+    def _categorize_domain(self, domain):
+        """Categorize domain based on ISPConfig usage patterns"""
+        if domain['parent_domain_id'] == 0 or domain['parent_domain_id'] is None:
+            return 'main_domain'
+        elif domain['type'] == 'subdomain':
+            return 'subdomain'
+        elif domain['type'] == 'alias':
+            return 'alias_domain'
+        elif domain['redirect_type'] and domain['redirect_type'] != '':
+            return 'redirect'
+        elif domain['parent_domain_id'] > 0:
+            # Fallback for unclear cases
+            return 'subdomain'
+        else:
+            return 'unknown'
+    
+    def _get_relevant_fields(self, category):
+        """Return list of fields relevant to each domain category"""
+        base_fields = ['domain_id', 'domain', 'active', 'client_name']
+        
+        field_sets = {
+            'main_domain': base_fields + [
+                'document_root', 'system_user', 'system_group', 'ssl', 'ssl_letsencrypt',
+                'apache_directives', 'nginx_directives', 'php_open_basedir', 'custom_php_ini',
+                'rewrite_rules', 'proxy_directives', 'php', 'cgi', 'ssi', 'suexec',
+                'allow_override', 'stats_type', 'backup_interval', 'hd_quota', 'traffic_quota'
+            ],
+            'subdomain': base_fields + [
+                'parent_domain_id', 'parent_domain_name', 'document_root', 'ssl',
+                'apache_directives', 'nginx_directives', 'custom_php_ini', 'php',
+                'redirect_type', 'redirect_path'
+            ],
+            'alias_domain': base_fields + [
+                'parent_domain_id', 'parent_domain_name', 'redirect_type', 'redirect_path'
+            ],
+            'redirect': base_fields + [
+                'parent_domain_id', 'parent_domain_name', 'redirect_type', 'redirect_path'
+            ]
+        }
+        
+        return field_sets.get(category, base_fields)
+    
+    def _check_inheritance(self, domain):
+        """Check what settings are inherited from parent"""
+        inheritance_info = {}
+        
+        if domain['parent_domain_id'] and domain['parent_domain_id'] > 0:
+            # These typically inherit from parent unless explicitly overridden
+            inheritance_info['inherits_ssl'] = not domain['ssl'] or domain['ssl'] == 'n'
+            inheritance_info['inherits_php_settings'] = not domain['custom_php_ini']
+            inheritance_info['has_custom_directives'] = bool(
+                domain['apache_directives'] or domain['nginx_directives']
+            )
+            inheritance_info['overrides_parent'] = bool(
+                domain['apache_directives'] or domain['nginx_directives'] or 
+                domain['custom_php_ini'] or domain['php_open_basedir']
+            )
+        
+        return inheritance_info
+    
+    def _analyze_relationships(self, main_domains):
+        """Analyze domain relationships for security implications"""
+        relationships = {
+            'inheritance_conflicts': [],
+            'ssl_mismatches': [],
+            'directive_overrides': [],
+            'security_concerns': []
+        }
+        
+        for main_domain in main_domains.values():
+            # Check SSL inheritance issues
+            if main_domain['ssl'] == 'y':
+                for subdomain in main_domain['subdomains']:
+                    if subdomain['ssl'] == 'n':
+                        relationships['ssl_mismatches'].append({
+                            'parent': main_domain['domain'],
+                            'child': subdomain['domain'],
+                            'issue': 'Parent has SSL, subdomain does not'
+                        })
+            
+            # Check directive overrides
+            for subdomain in main_domain['subdomains']:
+                if subdomain['inherited_from_parent'].get('overrides_parent'):
+                    relationships['directive_overrides'].append({
+                        'parent': main_domain['domain'],
+                        'child': subdomain['domain'],
+                        'overrides': [
+                            k for k, v in {
+                                'apache_directives': subdomain['apache_directives'],
+                                'nginx_directives': subdomain['nginx_directives'],
+                                'custom_php_ini': subdomain['custom_php_ini']
+                            }.items() if v
+                        ]
+                    })
+        
+        return relationships
     
     def get_mail_domains(self):
         query = """
@@ -531,9 +688,11 @@ class ISPConfigInventory:
             inventory['summary'] = {
                 'total_web_domains': inventory['web_domains']['total_count'],
                 'active_web_domains': inventory['web_domains']['active_count'],
-                'main_domains': inventory['web_domains']['main_domains_count'],
-                'subdomains': inventory['web_domains']['subdomains_count'],
-                'alias_domains': inventory['web_domains']['alias_domains_count'],
+                'main_domains': inventory['web_domains']['hierarchy_statistics']['main_domains_count'],
+                'subdomains': inventory['web_domains']['hierarchy_statistics']['subdomains_count'],
+                'alias_domains': inventory['web_domains']['hierarchy_statistics']['aliases_count'],
+                'redirect_domains': inventory['web_domains']['hierarchy_statistics']['redirects_count'],
+                'domains_with_children': inventory['web_domains']['hierarchy_statistics']['domains_with_children'],
                 'domains_with_apache_directives': inventory['web_domains']['directive_analysis']['apache_directives_count'],
                 'domains_with_nginx_directives': inventory['web_domains']['directive_analysis']['nginx_directives_count'],
                 'domains_with_custom_php': inventory['web_domains']['directive_analysis']['php_custom_count'],
@@ -550,12 +709,18 @@ class ISPConfigInventory:
                 'total_shell_users': inventory['shell_users']['total_count'],
                 'total_webdav_users': inventory['webdav_users']['total_count'],
                 'security_indicators': {
-                    'ssl_enabled_domains': inventory['web_domains']['ssl_enabled_count'],
-                    'letsencrypt_domains': inventory['web_domains']['letsencrypt_count'],
+                    'ssl_enabled_domains': inventory['web_domains']['security_analysis']['ssl_enabled_count'],
+                    'letsencrypt_domains': inventory['web_domains']['security_analysis']['letsencrypt_count'],
+                    'suexec_disabled_domains': inventory['web_domains']['security_analysis']['suexec_disabled_count'],
+                    'cgi_enabled_domains': inventory['web_domains']['security_analysis']['cgi_enabled_count'],
+                    'domains_with_custom_directives': inventory['web_domains']['security_analysis']['custom_directives_count'],
+                    'redirect_domains': inventory['web_domains']['security_analysis']['redirect_domains_count'],
                     'dnssec_zones': inventory['dns_zones']['dnssec_enabled_count'],
                     'shell_users_with_chroot': inventory['shell_users']['security_analysis']['chroot_enabled_count'],
                     'shell_users_with_ssh_keys': inventory['shell_users']['security_analysis']['ssh_key_count'],
-                    'databases_with_remote_access': inventory['databases']['remote_access_count']
+                    'databases_with_remote_access': inventory['databases']['remote_access_count'],
+                    'ssl_inheritance_mismatches': len(inventory['web_domains']['domain_relationships']['ssl_mismatches']),
+                    'directive_overrides': len(inventory['web_domains']['domain_relationships']['directive_overrides'])
                 }
             }
             
