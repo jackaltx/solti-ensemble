@@ -123,14 +123,8 @@ apply_retention() {
 
 # Generate the Python BOM script inline
 generate_python_script() {
-    cat > /tmp/ispconfig-bom-extractor.py << 'PYTHON_SCRIPT_EOF'
+    cat > /tmp/ispconfig-bom-extractor.py << 'EOF'
 #!/usr/bin/env python3
-"""
-ISPConfig Database Inventory Script
-Extracts what ISPConfig thinks exists from the database
-Part of the ISPConfig BOM Tool suite
-"""
-
 import json
 import sys
 import pymysql
@@ -139,101 +133,53 @@ import logging
 import os
 import re
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class ISPConfigInventory:
     def __init__(self, host=None, user=None, password=None, database=None):
-        # Get credentials from ISPConfig config file, environment, or parameters
         self.connection_params = self._get_db_credentials(host, user, password, database)
         self.connection = None
         
     def _parse_ispconfig_config(self, config_file='/usr/local/ispconfig/server/lib/config.inc.php'):
-        """Parse ISPConfig configuration file for database credentials"""
         credentials = {}
-        
         try:
             with open(config_file, 'r') as f:
                 content = f.read()
-                
-                # Extract database configuration using regex patterns
                 patterns = {
                     'host': r"\$conf\['db_host'\]\s*=\s*['\"]([^'\"]+)['\"]",
                     'user': r"\$conf\['db_user'\]\s*=\s*['\"]([^'\"]+)['\"]", 
                     'password': r"\$conf\['db_password'\]\s*=\s*['\"]([^'\"]*)['\"]",
                     'database': r"\$conf\['db_database'\]\s*=\s*['\"]([^'\"]+)['\"]"
                 }
-                
                 for key, pattern in patterns.items():
                     match = re.search(pattern, content)
                     if match:
                         credentials[key] = match.group(1)
-                        
                 logger.info(f"Successfully parsed ISPConfig config: {config_file}")
                 logger.info(f"Found database: {credentials.get('database', 'unknown')}@{credentials.get('host', 'unknown')}")
-                
         except FileNotFoundError:
             logger.warning(f"ISPConfig config file not found: {config_file}")
         except PermissionError:
             logger.warning(f"Permission denied reading ISPConfig config: {config_file}")
         except Exception as e:
             logger.warning(f"Error parsing ISPConfig config: {e}")
-            
         return credentials
     
     def _get_db_credentials(self, host, user, password, database):
-        """Get database credentials from multiple sources in priority order"""
-        
-        # Start with ISPConfig config file
         config_creds = self._parse_ispconfig_config()
-        
-        # Build final credentials with precedence: CLI args > ENV vars > config file > defaults
         credentials = {
-            'host': (
-                host or 
-                os.getenv('ISPCONFIG_DB_HOST') or 
-                config_creds.get('host') or 
-                'localhost'
-            ),
-            'user': (
-                user or 
-                os.getenv('ISPCONFIG_DB_USER') or 
-                config_creds.get('user') or 
-                'ispconfig'
-            ),
-            'password': (
-                password or 
-                os.getenv('ISPCONFIG_DB_PASSWORD') or 
-                config_creds.get('password') or 
-                ''
-            ),
-            'database': (
-                database or 
-                os.getenv('ISPCONFIG_DB_NAME') or 
-                config_creds.get('database') or 
-                'dbispconfig'
-            ),
+            'host': host or os.getenv('ISPCONFIG_DB_HOST') or config_creds.get('host') or 'localhost',
+            'user': user or os.getenv('ISPCONFIG_DB_USER') or config_creds.get('user') or 'ispconfig',
+            'password': password or os.getenv('ISPCONFIG_DB_PASSWORD') or config_creds.get('password') or '',
+            'database': database or os.getenv('ISPCONFIG_DB_NAME') or config_creds.get('database') or 'dbispconfig',
             'charset': 'utf8mb4',
             'cursorclass': pymysql.cursors.DictCursor
         }
-        
-        # Log credential sources (without password)
         logger.info(f"Database connection: {credentials['user']}@{credentials['host']}/{credentials['database']}")
-        
-        if password:
-            logger.info("Using password from CLI argument")
-        elif os.getenv('ISPCONFIG_DB_PASSWORD'):
-            logger.info("Using password from environment variable")
-        elif config_creds.get('password'):
-            logger.info("Using password from ISPConfig config file")
-        else:
-            logger.warning("No password configured - attempting connection without password")
-            
         return credentials
         
     def connect(self):
-        """Establish database connection"""
         try:
             self.connection = pymysql.connect(**self.connection_params)
             logger.info("Connected to ISPConfig database successfully")
@@ -241,7 +187,6 @@ class ISPConfigInventory:
         except pymysql.err.OperationalError as e:
             if "Access denied" in str(e):
                 logger.error("Database access denied - check credentials")
-                logger.error("Credential sources tried: CLI args > ENV vars > ISPConfig config > defaults")
             else:
                 logger.error(f"Database connection failed: {e}")
             return False
@@ -250,12 +195,10 @@ class ISPConfigInventory:
             return False
     
     def close(self):
-        """Close database connection"""
         if self.connection:
             self.connection.close()
     
     def execute_query(self, query, params=None):
-        """Execute query with error handling"""
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params or ())
@@ -265,58 +208,89 @@ class ISPConfigInventory:
             return []
     
     def get_web_domains(self):
-        """Extract website domains and configurations"""
         query = """
         SELECT 
-            w.domain_id,
-            w.domain,
-            w.document_root,
-            w.active,
-            w.type,
-            w.parent_domain_id,
-            w.redirect_type,
-            w.redirect_path,
-            w.ssl,
-            w.ssl_letsencrypt,
-            c.company_name as client_name,
-            c.client_id
+            w.domain_id, w.domain, w.document_root, w.active, w.type, w.parent_domain_id,
+            w.redirect_type, w.redirect_path, w.ssl, w.ssl_letsencrypt,
+            w.apache_directives, w.nginx_directives, w.php_open_basedir, w.custom_php_ini,
+            w.rewrite_rules, w.proxy_directives, w.vhost_type, w.php, w.subdomain,
+            w.directive_snippets_id, c.company_name as client_name, c.client_id,
+            parent.domain as parent_domain_name
         FROM web_domain w
         LEFT JOIN client c ON w.sys_groupid = c.sys_groupid
-        ORDER BY w.domain
+        LEFT JOIN web_domain parent ON w.parent_domain_id = parent.domain_id
+        ORDER BY w.parent_domain_id, w.domain
         """
-        
         domains = self.execute_query(query)
         logger.info(f"Found {len(domains)} web domains")
         
-        # Process and categorize domains
-        result = {
+        main_domains = []
+        subdomains = []
+        alias_domains = []
+        directive_analysis = {
+            'apache_directives_count': 0, 'nginx_directives_count': 0,
+            'php_custom_count': 0, 'rewrite_rules_count': 0,
+            'proxy_directives_count': 0, 'php_basedir_count': 0
+        }
+        
+        for domain in domains:
+            domain['has_apache_directives'] = bool(domain['apache_directives'] and domain['apache_directives'].strip())
+            domain['has_nginx_directives'] = bool(domain['nginx_directives'] and domain['nginx_directives'].strip())
+            domain['has_php_custom'] = bool(domain['custom_php_ini'] and domain['custom_php_ini'].strip())
+            domain['has_rewrite_rules'] = bool(domain['rewrite_rules'] and domain['rewrite_rules'].strip())
+            domain['has_proxy_directives'] = bool(domain['proxy_directives'] and domain['proxy_directives'].strip())
+            domain['has_php_basedir'] = bool(domain['php_open_basedir'] and domain['php_open_basedir'].strip())
+            
+            if domain['has_apache_directives']:
+                directive_analysis['apache_directives_count'] += 1
+            if domain['has_nginx_directives']:
+                directive_analysis['nginx_directives_count'] += 1
+            if domain['has_php_custom']:
+                directive_analysis['php_custom_count'] += 1
+            if domain['has_rewrite_rules']:
+                directive_analysis['rewrite_rules_count'] += 1
+            if domain['has_proxy_directives']:
+                directive_analysis['proxy_directives_count'] += 1
+            if domain['has_php_basedir']:
+                directive_analysis['php_basedir_count'] += 1
+            
+            if domain['parent_domain_id'] and domain['parent_domain_id'] > 0:
+                domain['domain_category'] = 'subdomain'
+                subdomains.append(domain)
+            elif domain['type'] == 'alias':
+                domain['domain_category'] = 'alias'
+                alias_domains.append(domain)
+            else:
+                domain['domain_category'] = 'main'
+                main_domains.append(domain)
+        
+        return {
             'total_count': len(domains),
             'active_count': len([d for d in domains if d['active'] == 'y']),
             'ssl_enabled_count': len([d for d in domains if d['ssl'] == 'y']),
             'letsencrypt_count': len([d for d in domains if d['ssl_letsencrypt'] == 'y']),
-            'domains': domains
+            'main_domains_count': len(main_domains),
+            'subdomains_count': len(subdomains),
+            'alias_domains_count': len(alias_domains),
+            'directive_analysis': directive_analysis,
+            'domains': domains,
+            'categorized_domains': {
+                'main_domains': main_domains,
+                'subdomains': subdomains, 
+                'alias_domains': alias_domains
+            }
         }
-        
-        return result
     
     def get_mail_domains(self):
-        """Extract mail domains and configuration"""
         query = """
-        SELECT 
-            md.domain_id,
-            md.domain,
-            md.active,
-            md.server_id,
-            c.company_name as client_name,
-            c.client_id
+        SELECT md.domain_id, md.domain, md.active, md.server_id,
+               c.company_name as client_name, c.client_id
         FROM mail_domain md
         LEFT JOIN client c ON md.sys_groupid = c.sys_groupid
         ORDER BY md.domain
         """
-        
         domains = self.execute_query(query)
         logger.info(f"Found {len(domains)} mail domains")
-        
         return {
             'total_count': len(domains),
             'active_count': len([d for d in domains if d['active'] == 'y']),
@@ -324,33 +298,19 @@ class ISPConfigInventory:
         }
     
     def get_mail_users(self):
-        """Extract mail users/accounts"""
         query = """
-        SELECT 
-            mu.mailuser_id,
-            mu.email,
-            mu.login,
-            mu.maildir,
-            mu.quota,
-            mu.cc,
-            mu.forward_in_lda,
-            mu.sender_cc,
-            mu.access,
-            md.domain,
-            c.company_name as client_name
+        SELECT mu.mailuser_id, mu.email, mu.login, mu.maildir, mu.quota,
+               mu.cc, mu.forward_in_lda, mu.sender_cc, mu.access,
+               md.domain, c.company_name as client_name
         FROM mail_user mu
         LEFT JOIN mail_domain md ON SUBSTRING_INDEX(mu.email, '@', -1) = md.domain
         LEFT JOIN client c ON mu.sys_groupid = c.sys_groupid
         ORDER BY mu.email
         """
-        
         users = self.execute_query(query)
         logger.info(f"Found {len(users)} mail users")
-        
-        # Calculate quota statistics
         total_quota = sum([int(u['quota'] or 0) for u in users if u['quota']])
         active_users = [u for u in users if u['access'] == 'y']
-        
         return {
             'total_count': len(users),
             'active_count': len(active_users),
@@ -359,26 +319,16 @@ class ISPConfigInventory:
         }
     
     def get_databases(self):
-        """Extract database information"""
         query = """
-        SELECT 
-            wd.database_id,
-            wd.database_name,
-            wd.database_user_id,
-            wd.database_charset,
-            wd.remote_access,
-            wd.remote_ips,
-            wd.active,
-            c.company_name as client_name,
-            c.client_id
+        SELECT wd.database_id, wd.database_name, wd.database_user_id,
+               wd.database_charset, wd.remote_access, wd.remote_ips, wd.active,
+               c.company_name as client_name, c.client_id
         FROM web_database wd
         LEFT JOIN client c ON wd.sys_groupid = c.sys_groupid
         ORDER BY wd.database_name
         """
-        
         databases = self.execute_query(query)
         logger.info(f"Found {len(databases)} databases")
-        
         return {
             'total_count': len(databases),
             'active_count': len([d for d in databases if d['active'] == 'y']),
@@ -387,27 +337,15 @@ class ISPConfigInventory:
         }
     
     def get_clients(self):
-        """Extract client/user information"""
         query = """
-        SELECT 
-            c.client_id,
-            c.company_name,
-            c.contact_name,
-            c.email,
-            c.username,
-            c.limit_web_domain,
-            c.limit_web_quota,
-            c.limit_maildomain,
-            c.limit_mailbox,
-            c.limit_database,
-            c.locked
+        SELECT c.client_id, c.company_name, c.contact_name, c.email, c.username,
+               c.limit_web_domain, c.limit_web_quota, c.limit_maildomain,
+               c.limit_mailbox, c.limit_database, c.locked
         FROM client c
         ORDER BY c.company_name
         """
-        
         clients = self.execute_query(query)
         logger.info(f"Found {len(clients)} clients")
-        
         return {
             'total_count': len(clients),
             'active_count': len([c for c in clients if c['locked'] != 'y']),
@@ -415,38 +353,152 @@ class ISPConfigInventory:
         }
     
     def get_dns_zones(self):
-        """Extract DNS zone information (if BIND is used)"""
         query = """
-        SELECT 
-            z.id,
-            z.origin,
-            z.ns,
-            z.mbox,
-            z.serial,
-            z.refresh,
-            z.retry,
-            z.expire,
-            z.minimum,
-            z.ttl,
-            z.active,
-            z.xfer,
-            c.company_name as client_name
+        SELECT z.id, z.origin, z.ns, z.mbox, z.serial, z.refresh, z.retry,
+               z.expire, z.minimum, z.ttl, z.active, z.xfer,
+               z.dnssec_wanted, z.dnssec_initialized, c.company_name as client_name
         FROM dns_soa z
         LEFT JOIN client c ON z.sys_groupid = c.sys_groupid
         ORDER BY z.origin
         """
-        
         zones = self.execute_query(query)
         logger.info(f"Found {len(zones)} DNS zones")
-        
         return {
             'total_count': len(zones),
-            'active_count': len([z for z in zones if z['active'] == 'y']),
+            'active_count': len([z for z in zones if z['active'] == 'Y']),
+            'dnssec_enabled_count': len([z for z in zones if z['dnssec_wanted'] == 'Y']),
             'zones': zones
         }
     
+    def get_directive_snippets(self):
+        query = """
+        SELECT ds.directive_snippets_id, ds.name, ds.type, ds.snippet,
+               ds.customer_viewable, ds.required_php_snippets, ds.active,
+               ds.master_directive_snippets_id
+        FROM directive_snippets ds
+        WHERE ds.active = 'y'
+        ORDER BY ds.type, ds.name
+        """
+        snippets = self.execute_query(query)
+        logger.info(f"Found {len(snippets)} directive snippets")
+        snippet_types = {}
+        for snippet in snippets:
+            snippet_type = snippet['type'] or 'unknown'
+            if snippet_type not in snippet_types:
+                snippet_types[snippet_type] = 0
+            snippet_types[snippet_type] += 1
+            snippet['has_content'] = bool(snippet['snippet'] and snippet['snippet'].strip())
+            snippet['content_length'] = len(snippet['snippet'] or '')
+        return {
+            'total_count': len(snippets),
+            'types': snippet_types,
+            'snippets': snippets
+        }
+    
+    def get_ftp_users(self):
+        query = """
+        SELECT fu.ftp_user_id, fu.username, fu.quota_size, fu.active,
+               fu.uid, fu.gid, fu.dir, fu.expires,
+               w.domain as parent_domain, c.company_name as client_name
+        FROM ftp_user fu
+        LEFT JOIN web_domain w ON fu.parent_domain_id = w.domain_id
+        LEFT JOIN client c ON fu.sys_groupid = c.sys_groupid
+        ORDER BY fu.username
+        """
+        users = self.execute_query(query)
+        logger.info(f"Found {len(users)} FTP users")
+        return {
+            'total_count': len(users),
+            'active_count': len([u for u in users if u['active'] == 'y']),
+            'users': users
+        }
+    
+    def get_shell_users(self):
+        query = """
+        SELECT su.shell_user_id, su.username, su.quota_size, su.active,
+               su.puser, su.pgroup, su.shell, su.dir, su.chroot, su.ssh_rsa,
+               w.domain as parent_domain, c.company_name as client_name
+        FROM shell_user su
+        LEFT JOIN web_domain w ON su.parent_domain_id = w.domain_id
+        LEFT JOIN client c ON su.sys_groupid = c.sys_groupid
+        ORDER BY su.username
+        """
+        users = self.execute_query(query)
+        logger.info(f"Found {len(users)} shell users")
+        shell_analysis = {
+            'chroot_enabled_count': len([u for u in users if u['chroot'] and u['chroot'] != '']),
+            'ssh_key_count': len([u for u in users if u['ssh_rsa'] and u['ssh_rsa'].strip()]),
+            'bash_users': len([u for u in users if u['shell'] == '/bin/bash']),
+            'restricted_shells': len([u for u in users if u['shell'] and u['shell'] != '/bin/bash'])
+        }
+        for user in users:
+            user['has_ssh_key'] = bool(user['ssh_rsa'] and user['ssh_rsa'].strip())
+            user['has_chroot'] = bool(user['chroot'] and user['chroot'].strip())
+        return {
+            'total_count': len(users),
+            'active_count': len([u for u in users if u['active'] == 'y']),
+            'security_analysis': shell_analysis,
+            'users': users
+        }
+    
+    def get_webdav_users(self):
+        query = """
+        SELECT wu.webdav_user_id, wu.username, wu.active, wu.dir,
+               w.domain as parent_domain, c.company_name as client_name
+        FROM webdav_user wu
+        LEFT JOIN web_domain w ON wu.parent_domain_id = w.domain_id
+        LEFT JOIN client c ON wu.sys_groupid = c.sys_groupid
+        ORDER BY wu.username
+        """
+        users = self.execute_query(query)
+        logger.info(f"Found {len(users)} WebDAV users")
+        return {
+            'total_count': len(users),
+            'active_count': len([u for u in users if u['active'] == 'y']),
+            'users': users
+        }
+    
+    def get_dns_records(self):
+        query = """
+        SELECT dr.id, dr.zone, dr.name, dr.type, dr.data, dr.aux, dr.ttl, dr.active,
+               ds.origin as zone_name
+        FROM dns_rr dr
+        LEFT JOIN dns_soa ds ON dr.zone = ds.id
+        WHERE dr.active = 'Y'
+        ORDER BY ds.origin, dr.type, dr.name
+        """
+        records = self.execute_query(query)
+        logger.info(f"Found {len(records)} DNS records")
+        record_types = {}
+        for record in records:
+            record_type = record['type']
+            if record_type not in record_types:
+                record_types[record_type] = 0
+            record_types[record_type] += 1
+        return {
+            'total_count': len(records),
+            'record_types': record_types,
+            'records': records
+        }
+    
+    def get_mail_filters(self):
+        query = """
+        SELECT mf.filter_id, mf.mailuser_id, mf.rulename, mf.source,
+               mf.searchterm, mf.op, mf.action, mf.target, mf.active,
+               mu.email as mailuser_email
+        FROM mail_user_filter mf
+        LEFT JOIN mail_user mu ON mf.mailuser_id = mu.mailuser_id
+        ORDER BY mu.email, mf.rulename
+        """
+        filters = self.execute_query(query)
+        logger.info(f"Found {len(filters)} mail filters")
+        return {
+            'total_count': len(filters),
+            'active_count': len([f for f in filters if f['active'] == 'y']),
+            'filters': filters
+        }
+    
     def generate_inventory(self):
-        """Generate complete inventory from ISPConfig database"""
         if not self.connect():
             return None
         
@@ -465,20 +517,46 @@ class ISPConfigInventory:
                 'web_domains': self.get_web_domains(),
                 'mail_domains': self.get_mail_domains(),
                 'mail_users': self.get_mail_users(),
+                'mail_filters': self.get_mail_filters(),
                 'databases': self.get_databases(),
                 'clients': self.get_clients(),
-                'dns_zones': self.get_dns_zones()
+                'dns_zones': self.get_dns_zones(),
+                'dns_records': self.get_dns_records(),
+                'directive_snippets': self.get_directive_snippets(),
+                'ftp_users': self.get_ftp_users(),
+                'shell_users': self.get_shell_users(),
+                'webdav_users': self.get_webdav_users()
             }
             
-            # Add summary statistics
             inventory['summary'] = {
                 'total_web_domains': inventory['web_domains']['total_count'],
                 'active_web_domains': inventory['web_domains']['active_count'],
+                'main_domains': inventory['web_domains']['main_domains_count'],
+                'subdomains': inventory['web_domains']['subdomains_count'],
+                'alias_domains': inventory['web_domains']['alias_domains_count'],
+                'domains_with_apache_directives': inventory['web_domains']['directive_analysis']['apache_directives_count'],
+                'domains_with_nginx_directives': inventory['web_domains']['directive_analysis']['nginx_directives_count'],
+                'domains_with_custom_php': inventory['web_domains']['directive_analysis']['php_custom_count'],
+                'domains_with_rewrite_rules': inventory['web_domains']['directive_analysis']['rewrite_rules_count'],
                 'total_mail_domains': inventory['mail_domains']['total_count'],
                 'total_mail_users': inventory['mail_users']['total_count'],
+                'total_mail_filters': inventory['mail_filters']['total_count'],
                 'total_databases': inventory['databases']['total_count'],
                 'total_clients': inventory['clients']['total_count'],
-                'total_dns_zones': inventory['dns_zones']['total_count']
+                'total_dns_zones': inventory['dns_zones']['total_count'],
+                'total_dns_records': inventory['dns_records']['total_count'],
+                'total_directive_snippets': inventory['directive_snippets']['total_count'],
+                'total_ftp_users': inventory['ftp_users']['total_count'],
+                'total_shell_users': inventory['shell_users']['total_count'],
+                'total_webdav_users': inventory['webdav_users']['total_count'],
+                'security_indicators': {
+                    'ssl_enabled_domains': inventory['web_domains']['ssl_enabled_count'],
+                    'letsencrypt_domains': inventory['web_domains']['letsencrypt_count'],
+                    'dnssec_zones': inventory['dns_zones']['dnssec_enabled_count'],
+                    'shell_users_with_chroot': inventory['shell_users']['security_analysis']['chroot_enabled_count'],
+                    'shell_users_with_ssh_keys': inventory['shell_users']['security_analysis']['ssh_key_count'],
+                    'databases_with_remote_access': inventory['databases']['remote_access_count']
+                }
             }
             
             logger.info("BOM inventory generation completed successfully")
@@ -491,7 +569,6 @@ class ISPConfigInventory:
             self.close()
 
 def main(output_file):
-    # Create inventory instance (password will be read from env or config)
     inventory_tool = ISPConfigInventory(
         host=None,
         user=None,
@@ -499,7 +576,6 @@ def main(output_file):
         database=None
     )
     
-    # Generate inventory
     inventory = inventory_tool.generate_inventory()
     
     if inventory is None:
@@ -510,7 +586,6 @@ def main(output_file):
         logger.error("3. Verify database access: mysql -u ispconfig -p dbispconfig")
         sys.exit(1)
     
-    # Output results
     json_output = json.dumps(inventory, indent=2, default=str)
     
     with open(output_file, 'w') as f:
@@ -526,7 +601,7 @@ if __name__ == '__main__':
     
     success = main(sys.argv[1])
     sys.exit(0 if success else 1)
-PYTHON_SCRIPT_EOF
+EOF
 }
 
 # Finalize git tracking
