@@ -4,6 +4,8 @@
 # Extracts what ISPConfig thinks exists from the database
 # Compatible with ispconfig-audit.sh command line interface
 
+# This works, but the output is too much to upload to claude
+
 SCRIPT_VERSION="2.1"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
