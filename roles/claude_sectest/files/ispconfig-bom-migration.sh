@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# ISPConfig3 Database BOM (Bill of Materials) Audit Script
-# Migration Verification Version - Extracts key data for migration verification
+# ISPConfig3 Database Migration Summary Audit Script
+# Simplified version using Python - generates focused migration data
 # Compatible with ispconfig-audit.sh command line interface
 
-SCRIPT_VERSION="2.4"
+SCRIPT_VERSION="2.5"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
 
@@ -12,13 +12,6 @@ HOSTNAME=$(hostname)
 AUDIT_DIR=""
 RETAIN_COMMITS=""
 OUTPUT_FILENAME="ispconfig-bom-config.json"
-
-# Global variables for database connection
-DB_USER=""
-DB_PASSWORD=""
-DB_DATABASE=""
-DB_HOST=""
-DB_AUTH_METHOD=""
 
 # Usage function
 usage() {
@@ -29,8 +22,8 @@ usage() {
     echo "  --retain <number> Keep only the last N commits (optional, for development)"
     echo ""
     echo "Examples:"
-    echo "  $0 -d /opt/audit/ispconfig-bom-audit                    # Production mode (keep all history)"
-    echo "  $0 -d /opt/audit/ispconfig-bom-audit --retain 20       # Development mode (keep last 20 commits)"
+    echo "  $0 -d /opt/audit/ispconfig-migration-summary                    # Production mode (keep all history)"
+    echo "  $0 -d /opt/audit/ispconfig-migration-summary --retain 20       # Development mode (keep last 20 commits)"
     exit 1
 }
 
@@ -67,125 +60,23 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Parse ISPConfig credentials with robust regex
-parse_ispconfig_credentials() {
-    local config_file="/usr/local/ispconfig/server/lib/config.inc.php"
-    
-    if [[ ! -f "$config_file" ]]; then
-        echo "ISPConfig config file not found: $config_file" >&2
-        return 1
-    fi
-    
-    echo "Parsing ISPConfig credentials from: $config_file"
-    
-    # Use sed for precise parsing - match only $conf assignments, not define() statements
-    DB_USER=$(grep "^\$conf\['db_user'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
-    DB_PASSWORD=$(grep "^\$conf\['db_password'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
-    DB_DATABASE=$(grep "^\$conf\['db_database'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
-    DB_HOST=$(grep "^\$conf\['db_host'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
-    
-    # Debug output (remove password for security)
-    echo "Parsed credentials:"
-    echo "  DB_USER: '$DB_USER'"
-    echo "  DB_DATABASE: '$DB_DATABASE'"
-    echo "  DB_HOST: '$DB_HOST'"
-    echo "  DB_PASSWORD: [$(echo -n "$DB_PASSWORD" | wc -c) characters]"
-    
-    # Validate that we got the essential credentials
-    if [[ -z "$DB_USER" || -z "$DB_DATABASE" ]]; then
-        echo "ERROR: Failed to parse essential database credentials" >&2
-        echo "Expected format: \$conf['db_user'] = 'username';" >&2
-        return 1
-    fi
-    
-    return 0
-}
-
-# Enhanced dependency checking with better error messages
+# Check dependencies
 check_dependencies() {
-    local missing_tools=()
-    
-    if ! command -v mysql &> /dev/null; then
-        missing_tools+=("mysql-client")
-    fi
-    
-    if [[ ${#missing_tools[@]} -gt 0 ]]; then
-        echo "ERROR: Missing required tools: ${missing_tools[*]}" >&2
-        echo "Install with: apt-get install ${missing_tools[*]}" >&2
+    if ! command -v python3 &> /dev/null; then
+        echo "ERROR: Python3 is required but not found" >&2
         exit 1
     fi
     
-    # Parse ISPConfig credentials
-    if ! parse_ispconfig_credentials; then
+    if ! python3 -c "import pymysql" &> /dev/null; then
+        echo "ERROR: Python3 pymysql module is required but not found" >&2
+        echo "Install with: apt-get install python3-pymysql" >&2
         exit 1
     fi
-    
-    # Test database connectivity
-    echo "Testing database connectivity..."
-    
-    local test_output
-    local test_error
-    
-    # Build connection string
-    local mysql_args=()
-    mysql_args+=("-u" "$DB_USER")
-    
-    if [[ -n "$DB_PASSWORD" ]]; then
-        mysql_args+=("-p$DB_PASSWORD")
-    fi
-    
-    if [[ -n "$DB_HOST" && "$DB_HOST" != "localhost" ]]; then
-        mysql_args+=("-h" "$DB_HOST")
-    fi
-    
-    mysql_args+=("$DB_DATABASE")
-    
-    # Test connection
-    if test_output=$(mysql "${mysql_args[@]}" -e "SELECT 1 as test;" 2>&1); then
-        echo "✓ Database connection successful"
-        DB_AUTH_METHOD="ispconfig_credentials"
-        return 0
-    else
-        echo "✗ Database connection failed" >&2
-        echo "Connection details:" >&2
-        echo "  User: $DB_USER" >&2
-        echo "  Database: $DB_DATABASE" >&2
-        echo "  Host: $DB_HOST" >&2
-        echo "" >&2
-        echo "MySQL error output:" >&2
-        echo "$test_output" >&2
-        echo "" >&2
-        echo "Troubleshooting steps:" >&2
-        echo "1. Verify MySQL service: systemctl status mysql" >&2
-        echo "2. Test connection manually: mysql -u '$DB_USER' -p '$DB_DATABASE'" >&2
-        echo "3. Check user permissions: SHOW GRANTS FOR '$DB_USER'@'localhost';" >&2
-        echo "4. Verify database exists: SHOW DATABASES;" >&2
-        exit 1
-    fi
-}
-
-# Build MySQL command with proper escaping
-build_mysql_command() {
-    local mysql_cmd="mysql"
-    
-    mysql_cmd="$mysql_cmd -u '$DB_USER'"
-    
-    if [[ -n "$DB_PASSWORD" ]]; then
-        mysql_cmd="$mysql_cmd -p'$DB_PASSWORD'"
-    fi
-    
-    if [[ -n "$DB_HOST" && "$DB_HOST" != "localhost" ]]; then
-        mysql_cmd="$mysql_cmd -h '$DB_HOST'"
-    fi
-    
-    mysql_cmd="$mysql_cmd '$DB_DATABASE'"
-    
-    echo "$mysql_cmd"
 }
 
 # Setup audit directory and git repo
 setup_audit_repo() {
-    echo "Setting up BOM audit repository at: $AUDIT_DIR"
+    echo "Setting up migration summary audit repository at: $AUDIT_DIR"
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
@@ -194,9 +85,9 @@ setup_audit_repo() {
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
         git init
-        git config user.name "ISPConfig BOM Audit"
-        git config user.email "bom-audit@$(hostname)"
-        echo "Initialized new git repository for BOM audit tracking"
+        git config user.name "ISPConfig Migration Summary Audit"
+        git config user.email "migration-audit@$(hostname)"
+        echo "Initialized new git repository for migration audit tracking"
     fi
 }
 
@@ -230,107 +121,201 @@ apply_retention() {
     fi
 }
 
-# Generate the migration verification script inline
-generate_migration_script() {
-    cat > /tmp/ispconfig-migration-verifier.sql << 'EOF'
--- ISPConfig Migration Verification Report
--- Purpose: Verify complete site migration (web, email, DNS)
+# Generate the Python migration summary script
+generate_migration_summary_script() {
+    cat > /tmp/ispconfig-bom-migration.py << 'EOF'
+#!/usr/bin/env python3
+import json
+import sys
+import pymysql
+from datetime import datetime
+import logging
+import os
+import re
 
--- ==============================================
--- WEB DOMAINS - All domains and their configs
--- ==============================================
-SELECT 'WEB_DOMAINS' as section, domain, active, type, 
-       CASE WHEN parent_domain_id = 0 THEN 'MAIN' ELSE 'CHILD' END as domain_type,
-       ssl, ssl_letsencrypt, php,
-       CASE WHEN apache_directives IS NOT NULL AND apache_directives != '' THEN 'YES' ELSE 'NO' END as has_apache_directives,
-       CASE WHEN nginx_directives IS NOT NULL AND nginx_directives != '' THEN 'YES' ELSE 'NO' END as has_nginx_directives,
-       CASE WHEN custom_php_ini IS NOT NULL AND custom_php_ini != '' THEN 'YES' ELSE 'NO' END as has_custom_php,
-       CASE WHEN rewrite_rules IS NOT NULL AND rewrite_rules != '' THEN 'YES' ELSE 'NO' END as has_rewrites,
-       redirect_type, system_user,
-       c.company_name as client
-FROM web_domain w
-LEFT JOIN client c ON w.sys_groupid = c.sys_groupid
-ORDER BY w.parent_domain_id, w.domain;
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
--- ==============================================
--- MAIL DOMAINS - All mail domains  
--- ==============================================
-SELECT 'MAIL_DOMAINS' as section, domain, active, dkim,
-       c.company_name as client
-FROM mail_domain md
-LEFT JOIN client c ON md.sys_groupid = c.sys_groupid
-ORDER BY domain;
+class ISPConfigMigrationSummary:
+    def __init__(self):
+        self.connection_params = self._get_db_credentials()
+        self.connection = None
+        
+    def _parse_ispconfig_config(self, config_file='/usr/local/ispconfig/server/lib/config.inc.php'):
+        credentials = {}
+        try:
+            with open(config_file, 'r') as f:
+                content = f.read()
+                patterns = {
+                    'host': r"\$conf\['db_host'\]\s*=\s*['\"]([^'\"]+)['\"]",
+                    'user': r"\$conf\['db_user'\]\s*=\s*['\"]([^'\"]+)['\"]", 
+                    'password': r"\$conf\['db_password'\]\s*=\s*['\"]([^'\"]*)['\"]",
+                    'database': r"\$conf\['db_database'\]\s*=\s*['\"]([^'\"]+)['\"]"
+                }
+                for key, pattern in patterns.items():
+                    match = re.search(pattern, content)
+                    if match:
+                        credentials[key] = match.group(1)
+                logger.info(f"Successfully parsed ISPConfig config: {config_file}")
+        except Exception as e:
+            logger.warning(f"Error parsing ISPConfig config: {e}")
+        return credentials
+    
+    def _get_db_credentials(self):
+        config_creds = self._parse_ispconfig_config()
+        credentials = {
+            'host': config_creds.get('host') or 'localhost',
+            'user': config_creds.get('user') or 'ispconfig',
+            'password': config_creds.get('password') or '',
+            'database': config_creds.get('database') or 'dbispconfig',
+            'charset': 'utf8mb4',
+            'cursorclass': pymysql.cursors.DictCursor
+        }
+        return credentials
+        
+    def connect(self):
+        try:
+            self.connection = pymysql.connect(**self.connection_params)
+            logger.info("Connected to ISPConfig database successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            return False
+    
+    def close(self):
+        if self.connection:
+            self.connection.close()
+    
+    def execute_query(self, query, params=None):
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, params or ())
+                return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Query failed: {query[:100]}... Error: {e}")
+            return []
+    
+    def generate_migration_summary(self):
+        if not self.connect():
+            return None
+        
+        try:
+            report = {
+                'audit_info': {
+                    'version': '2.5',
+                    'date': datetime.utcnow().isoformat() + 'Z',
+                    'hostname': os.uname().nodename,
+                    'purpose': 'ISPConfig Migration Summary'
+                }
+            }
+            
+            # Get counts only - no detailed data
+            summary_queries = {
+                'web_domains_total': "SELECT COUNT(*) as count FROM web_domain",
+                'web_domains_active': "SELECT COUNT(*) as count FROM web_domain WHERE active='y'",
+                'web_domains_ssl': "SELECT COUNT(*) as count FROM web_domain WHERE ssl='y'",
+                'web_domains_custom_directives': """
+                    SELECT COUNT(*) as count FROM web_domain 
+                    WHERE (apache_directives IS NOT NULL AND apache_directives != '') 
+                       OR (nginx_directives IS NOT NULL AND nginx_directives != '')
+                """,
+                'mail_domains_total': "SELECT COUNT(*) as count FROM mail_domain",
+                'mail_domains_active': "SELECT COUNT(*) as count FROM mail_domain WHERE active='y'",
+                'mail_domains_dkim': "SELECT COUNT(*) as count FROM mail_domain WHERE dkim='y'",
+                'mail_users_total': "SELECT COUNT(*) as count FROM mail_user",
+                'mail_users_active': "SELECT COUNT(*) as count FROM mail_user WHERE access='y'",
+                'dns_zones_total': "SELECT COUNT(*) as count FROM dns_soa",
+                'dns_zones_active': "SELECT COUNT(*) as count FROM dns_soa WHERE active='Y'",
+                'dns_zones_dnssec': "SELECT COUNT(*) as count FROM dns_soa WHERE dnssec_wanted='Y'",
+                'databases_total': "SELECT COUNT(*) as count FROM web_database",
+                'databases_active': "SELECT COUNT(*) as count FROM web_database WHERE active='y'",
+                'clients_total': "SELECT COUNT(*) as count FROM client",
+                'directive_snippets': "SELECT COUNT(*) as count FROM directive_snippets WHERE active='y'"
+            }
+            
+            summary = {}
+            for key, query in summary_queries.items():
+                result = self.execute_query(query)
+                summary[key] = result[0]['count'] if result else 0
+            
+            # Get list of domains (names only, not full details)
+            web_domains = self.execute_query("SELECT domain FROM web_domain WHERE active='y' ORDER BY domain")
+            mail_domains = self.execute_query("SELECT domain FROM mail_domain WHERE active='y' ORDER BY domain")
+            dns_zones = self.execute_query("SELECT origin as domain FROM dns_soa WHERE active='Y' ORDER BY origin")
+            
+            # Get clients list (minimal info)
+            clients = self.execute_query("SELECT company_name, contact_name FROM client ORDER BY company_name")
+            
+            # Special checks for migration validation
+            custom_domains = self.execute_query("""
+                SELECT domain, 
+                       CASE WHEN apache_directives IS NOT NULL AND apache_directives != '' THEN 'apache' ELSE '' END as has_apache,
+                       CASE WHEN nginx_directives IS NOT NULL AND nginx_directives != '' THEN 'nginx' ELSE '' END as has_nginx,
+                       CASE WHEN custom_php_ini IS NOT NULL AND custom_php_ini != '' THEN 'php' ELSE '' END as has_php,
+                       CASE WHEN ssl='y' THEN 'ssl' ELSE '' END as has_ssl
+                FROM web_domain 
+                WHERE active='y' AND (
+                    (apache_directives IS NOT NULL AND apache_directives != '') OR
+                    (nginx_directives IS NOT NULL AND nginx_directives != '') OR
+                    (custom_php_ini IS NOT NULL AND custom_php_ini != '') OR
+                    ssl='y'
+                )
+                ORDER BY domain
+            """)
+            
+            report.update({
+                'summary_counts': summary,
+                'domain_lists': {
+                    'web_domains': [d['domain'] for d in web_domains],
+                    'mail_domains': [d['domain'] for d in mail_domains],
+                    'dns_zones': [d['domain'] for d in dns_zones]
+                },
+                'clients': clients,
+                'domains_requiring_attention': custom_domains,
+                'migration_checklist': {
+                    'total_domains': summary['web_domains_active'],
+                    'ssl_domains': summary['web_domains_ssl'],
+                    'custom_config_domains': summary['web_domains_custom_directives'],
+                    'mail_accounts': summary['mail_users_active'],
+                    'dkim_domains': summary['mail_domains_dkim'],
+                    'dns_zones': summary['dns_zones_active'],
+                    'dnssec_zones': summary['dns_zones_dnssec'],
+                    'databases': summary['databases_active']
+                }
+            })
+            
+            logger.info("Migration summary generation completed successfully")
+            return report
+            
+        except Exception as e:
+            logger.error(f"Migration summary generation failed: {e}")
+            return None
+        finally:
+            self.close()
 
--- ==============================================
--- MAIL USERS - All email accounts
--- ==============================================
-SELECT 'MAIL_USERS' as section, email, access as active, quota,
-       CASE WHEN cc IS NOT NULL AND cc != '' THEN 'YES' ELSE 'NO' END as has_forwarding,
-       CASE WHEN autoresponder = 'y' THEN 'YES' ELSE 'NO' END as has_autoresponder,
-       c.company_name as client
-FROM mail_user mu
-LEFT JOIN client c ON mu.sys_groupid = c.sys_groupid
-ORDER BY email;
+def main(output_file):
+    audit_tool = ISPConfigMigrationSummary()
+    report = audit_tool.generate_migration_summary()
+    
+    if report is None:
+        logger.error("Failed to generate migration summary")
+        sys.exit(1)
+    
+    json_output = json.dumps(report, indent=2, default=str)
+    
+    with open(output_file, 'w') as f:
+        f.write(json_output)
+    
+    logger.info(f"Migration summary saved to {output_file}")
+    return True
 
--- ==============================================
--- DNS ZONES - All DNS zones
--- ==============================================
-SELECT 'DNS_ZONES' as section, origin as domain, active, 
-       dnssec_wanted, dnssec_initialized,
-       c.company_name as client
-FROM dns_soa ds
-LEFT JOIN client c ON ds.sys_groupid = c.sys_groupid
-ORDER BY origin;
-
--- ==============================================
--- DATABASES - All databases
--- ==============================================
-SELECT 'DATABASES' as section, database_name, active, database_charset,
-       remote_access, c.company_name as client
-FROM web_database wd
-LEFT JOIN client c ON wd.sys_groupid = c.sys_groupid
-ORDER BY database_name;
-
--- ==============================================
--- DIRECTIVE SNIPPETS - Custom configurations
--- ==============================================
-SELECT 'DIRECTIVE_SNIPPETS' as section, name, type, customer_viewable, active
-FROM directive_snippets
-WHERE active = 'y'
-ORDER BY type, name;
-
--- ==============================================
--- SUMMARY COUNTS - Migration verification totals
--- ==============================================
-SELECT 'SUMMARY' as section, 'Web Domains Total' as item, COUNT(*) as count FROM web_domain
-UNION ALL
-SELECT 'SUMMARY', 'Web Domains Active', COUNT(*) FROM web_domain WHERE active='y'
-UNION ALL
-SELECT 'SUMMARY', 'Web Domains with SSL', COUNT(*) FROM web_domain WHERE ssl='y'
-UNION ALL
-SELECT 'SUMMARY', 'Web Domains with Custom Directives', COUNT(*) FROM web_domain 
-WHERE (apache_directives IS NOT NULL AND apache_directives != '') 
-   OR (nginx_directives IS NOT NULL AND nginx_directives != '')
-UNION ALL
-SELECT 'SUMMARY', 'Mail Domains Total', COUNT(*) FROM mail_domain
-UNION ALL
-SELECT 'SUMMARY', 'Mail Domains Active', COUNT(*) FROM mail_domain WHERE active='y'
-UNION ALL
-SELECT 'SUMMARY', 'Mail Users Total', COUNT(*) FROM mail_user
-UNION ALL
-SELECT 'SUMMARY', 'Mail Users Active', COUNT(*) FROM mail_user WHERE access='y'
-UNION ALL
-SELECT 'SUMMARY', 'DNS Zones Total', COUNT(*) FROM dns_soa
-UNION ALL
-SELECT 'SUMMARY', 'DNS Zones Active', COUNT(*) FROM dns_soa WHERE active='Y'
-UNION ALL
-SELECT 'SUMMARY', 'Databases Total', COUNT(*) FROM web_database
-UNION ALL
-SELECT 'SUMMARY', 'Databases Active', COUNT(*) FROM web_database WHERE active='y'
-UNION ALL
-SELECT 'SUMMARY', 'Clients Total', COUNT(*) FROM client
-UNION ALL
-SELECT 'SUMMARY', 'Custom Directive Snippets', COUNT(*) FROM directive_snippets WHERE active='y';
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: python3 script.py <output_file>", file=sys.stderr)
+        sys.exit(1)
+    
+    success = main(sys.argv[1])
+    sys.exit(0 if success else 1)
 EOF
 }
 
@@ -340,17 +325,17 @@ finalize_audit() {
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
-        echo "No BOM configuration changes detected since last audit"
-        COMMIT_MSG="BOM audit $AUDIT_DATE - No changes"
+        echo "No migration summary changes detected since last audit"
+        COMMIT_MSG="Migration summary audit $AUDIT_DATE - No changes"
         git add "$OUTPUT_FILENAME" 2>/dev/null || true
         git commit --allow-empty -m "$COMMIT_MSG" >/dev/null 2>&1
     else
-        echo "BOM configuration changes detected - committing to audit history"
+        echo "Migration summary changes detected - committing to audit history"
         if git rev-parse --verify HEAD >/dev/null 2>&1; then
             echo "Summary of changes:"
-            git diff --stat "$OUTPUT_FILENAME" 2>/dev/null || echo "  (New BOM configuration file)"
+            git diff --stat "$OUTPUT_FILENAME" 2>/dev/null || echo "  (New migration summary file)"
         fi
-        COMMIT_MSG="BOM audit $AUDIT_DATE"
+        COMMIT_MSG="Migration summary audit $AUDIT_DATE"
         git add "$OUTPUT_FILENAME"
         git commit -m "$COMMIT_MSG" >/dev/null 2>&1
     fi
@@ -359,7 +344,7 @@ finalize_audit() {
     apply_retention
     
     echo ""
-    echo "BOM Audit History Summary:"
+    echo "Migration Summary Audit History:"
     echo "- Repository: $AUDIT_DIR"
     echo "- Total commits: $(git rev-list --count HEAD 2>/dev/null || echo "1")"
     if [[ -n "$RETAIN_COMMITS" ]]; then
@@ -370,9 +355,9 @@ finalize_audit() {
 }
 
 # Main execution
-echo "Starting ISPConfig3 Database BOM Audit..."
+echo "Starting ISPConfig3 Migration Summary Audit..."
 
-# Check dependencies and parse credentials
+# Check dependencies
 check_dependencies
 
 # Setup the audit repository
@@ -381,66 +366,35 @@ setup_audit_repo
 OUTPUT_FILE="$AUDIT_DIR/$OUTPUT_FILENAME"
 echo "Output file: $OUTPUT_FILE"
 
-# Generate the migration verification SQL
-generate_migration_script
+# Generate the Python script
+generate_migration_summary_script
 
-# Build the appropriate MySQL command
-MYSQL_CMD=$(build_mysql_command)
-
-# Run the migration verification query with enhanced error checking
-echo "Extracting ISPConfig migration verification data..."
-echo "Using authentication: $DB_USER@$DB_HOST/$DB_DATABASE"
-
-# Use a more direct approach with proper error capture
-mysql_exit_code=0
-if mysql -u "$DB_USER" -p"$DB_PASSWORD" "$DB_DATABASE" < /tmp/ispconfig-migration-verifier.sql > "$OUTPUT_FILE" 2>/tmp/mysql_error.log; then
-    mysql_exit_code=0
-else
-    mysql_exit_code=$?
-fi
-
-if [[ $mysql_exit_code -eq 0 ]]; then
-    echo "✓ Migration verification completed successfully!"
+# Run the Python migration summary
+echo "Extracting ISPConfig migration summary data..."
+if python3 /tmp/ispconfig-bom-migration.py "$OUTPUT_FILE"; then
+    echo "✓ Migration summary completed successfully!"
     echo "Report saved to: $OUTPUT_FILE"
     echo ""
-    echo "Quick Migration Checklist:"
-    echo "- Compare SUMMARY counts between old and new servers"
-    echo "- Verify all domains with 'has_apache_directives=YES' are migrated"
-    echo "- Check SSL certificates for all ssl='y' domains"
-    echo "- Confirm DKIM keys for dkim='y' mail domains"
-    echo "- Validate DNS zones and DNSSEC settings"
+    echo "Migration Summary:"
     
-    # Show quick stats if available
-    if command -v wc &> /dev/null; then
-        echo "- Report contains $(wc -l < "$OUTPUT_FILE") lines of data"
+    # Show summary stats if jq is available
+    if command -v jq &> /dev/null; then
+        echo "- Web domains (active): $(jq -r '.summary_counts.web_domains_active // "unknown"' "$OUTPUT_FILE")"
+        echo "- Mail users (active): $(jq -r '.summary_counts.mail_users_active // "unknown"' "$OUTPUT_FILE")"
+        echo "- Databases (active): $(jq -r '.summary_counts.databases_active // "unknown"' "$OUTPUT_FILE")"
+        echo "- Domains with custom config: $(jq -r '.summary_counts.web_domains_custom_directives // "unknown"' "$OUTPUT_FILE")"
+        echo "- SSL domains: $(jq -r '.summary_counts.web_domains_ssl // "unknown"' "$OUTPUT_FILE")"
+        echo "- DKIM domains: $(jq -r '.summary_counts.mail_domains_dkim // "unknown"' "$OUTPUT_FILE")"
     fi
-    
-    # Clean up temporary files
-    rm -f /tmp/ispconfig-migration-verifier.sql /tmp/mysql_error.log
-    
-    # Finalize git tracking and apply retention
-    finalize_audit
 else
-    echo "✗ ERROR: Migration verification failed (exit code: $mysql_exit_code)" >&2
-    if [[ -f /tmp/mysql_error.log ]]; then
-        echo "" >&2
-        echo "MySQL Error Details:" >&2
-        cat /tmp/mysql_error.log >&2
-    fi
-    echo "" >&2
-    echo "Connection Details:" >&2
-    echo "- User: $DB_USER" >&2
-    echo "- Database: $DB_DATABASE" >&2
-    echo "- Host: $DB_HOST" >&2
-    echo "- Password length: $(echo -n "$DB_PASSWORD" | wc -c) characters" >&2
-    echo "" >&2
-    echo "Troubleshooting:" >&2
-    echo "1. Test manual connection: mysql -u '$DB_USER' -p '$DB_DATABASE'" >&2
-    echo "2. Verify user permissions: mysql -u root -p -e \"SHOW GRANTS FOR '$DB_USER'@'localhost';\"" >&2
-    echo "3. Check database exists: mysql -u root -p -e \"SHOW DATABASES;\" | grep '$DB_DATABASE'" >&2
-    echo "4. Verify config file: /usr/local/ispconfig/server/lib/config.inc.php" >&2
-    
+    echo "✗ ERROR: Migration summary failed" >&2
     # Clean up temporary files
-    rm -f /tmp/ispconfig-migration-verifier.sql /tmp/mysql_error.log
+    rm -f /tmp/ispconfig-bom-migration.py
     exit 1
 fi
+
+# Clean up temporary files
+    rm -f /tmp/ispconfig-bom-migration.py
+
+# Finalize git tracking and apply retention
+finalize_audit
