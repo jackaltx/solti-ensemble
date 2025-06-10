@@ -5,6 +5,7 @@ This role manages NFS client installation and mount configuration for Linux syst
 ## Overview
 
 The role handles:
+
 - Installation of NFS client packages
 - Configuration of NFS mount points
 - Support for multiple NFS shares
@@ -13,10 +14,12 @@ The role handles:
 ## Requirements
 
 ### Platform Support
+
 - Debian/Ubuntu systems (uses apt)
 - RedHat/CentOS systems (uses dnf)
 
 ### Prerequisites
+
 - Systemd-based system
 - Network connectivity to NFS server
 - Proper firewall configuration for NFS ports
@@ -24,11 +27,13 @@ The role handles:
 ## Role Variables
 
 ### Main Control Variable
+
 ```yaml
 mount_nfs_share: false    # Master switch to enable/disable NFS mounting
 ```
 
 ### NFS Mount Configuration
+
 ```yaml
 cluster_nfs_mounts:       # Dictionary of NFS mount configurations
   mount_name:             # Unique identifier for each mount
@@ -40,12 +45,15 @@ cluster_nfs_mounts:       # Dictionary of NFS mount configurations
 ```
 
 ### Default Mount Options
+
 The role includes optimized default mount options:
+
 ```yaml
 opts: "rw,noatime,bg,rsize=131072,wsize=131072,hard,intr,timeo=150,retrans=3"
 ```
 
 These options provide:
+
 - Read-write access
 - Background mounting
 - Optimized read/write sizes
@@ -107,6 +115,7 @@ Advanced configuration with multiple mounts:
 ## Mount States
 
 The role supports several mount states:
+
 - `mounted`: Ensure mount is present and mounted
 - `present`: Ensure mount is in fstab but not mounted
 - `absent`: Remove mount from fstab
@@ -135,6 +144,7 @@ nfs-client/
 ## Performance Tuning
 
 The default mount options are optimized for performance:
+
 - `rsize=131072`: Read block size
 - `wsize=131072`: Write block size
 - `noatime`: Disable access time updates
@@ -146,6 +156,7 @@ The default mount options are optimized for performance:
 ## Troubleshooting
 
 Common issues and solutions:
+
 1. Mount fails
    - Check network connectivity
    - Verify NFS service on server
@@ -157,7 +168,7 @@ Common issues and solutions:
 
 ## License
 
-BSD
+MIT-0
 
 ## Author Information
 

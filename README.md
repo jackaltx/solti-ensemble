@@ -1,16 +1,37 @@
 # Ansible Collection - jackaltx.solti_ensemble
 
-A comprehensive collection of Ansible roles for infrastructure automation, security hardening, and development environment setup. Created by jackaltx & Claude AI.
+A comprehensive collection of Ansible roles for infrastructure automation, security hardening, and development environment setup. Part of the SOLTI (Systems Oriented Laboratory Testing & Integration) ecosystem.
 
 ## Collection Overview
 
-This collection provides battle-tested Ansible roles covering everything from security auditing to development tooling. Each role is designed with best practices, security, and maintainability in mind.
+This collection provides battle-tested Ansible roles covering everything from security auditing to development tooling. Each role is designed with best practices, security, and maintainability in mind, featuring advanced testing frameworks and AI-powered analysis capabilities.
+
+## Architecture Overview
+
+The collection provides integrated automation with clear patterns:
+
+### Security & Auditing Pipeline
+
+- **claude_sectest**: Multi-script security auditing with Git-based change tracking and Claude AI analysis
+- **sshd_harden**: SSH daemon hardening with modern cryptographic algorithms
+
+### Infrastructure & Database Pipeline  
+
+- **mariadb**: Database server with security-focused setup and backup functionality
+- **nfs-client**: Storage integration for distributed deployments with optimized performance
+
+### Development & Platform Pipeline
+
+- **vs_code**: Development environment setup with official repositories
+- **gitea**: Self-hosted Git service with complete lifecycle management
+- **podman**: Rootless container engine as Docker alternative
+- **wireguard**: Modern VPN client with secure key management
 
 ## Security & Auditing Roles
 
 ### [claude_sectest](roles/claude_sectest/README.md)
 
-**ISPConfig Security Audit Role** - A comprehensive security auditing framework for ISPConfig3 servers featuring multiple specialized audit scripts, Git-based change tracking, and professional Claude AI analysis integration. Implements a "build small scripts, collect all for you" approach covering configuration security, database inventory, DNS records, and intrusion prevention.
+**ISPConfig Security Audit Role (v1.1)** - A comprehensive security auditing framework for ISPConfig3 servers featuring multiple specialized audit scripts, Git-based change tracking, and professional Claude AI analysis integration. Implements a "build small scripts, collect all for you" approach covering configuration security, database inventory, DNS records, and intrusion prevention systems.
 
 ### [sshd_harden](roles/sshd_harden/README.md)
 
@@ -46,24 +67,40 @@ This collection provides battle-tested Ansible roles covering everything from se
 
 **WireGuard VPN Client** - Modern VPN client installation and configuration for Rocky Linux 9 and Debian 12 with secure key generation, automatic backups, and comprehensive tag-based execution control.
 
-## Utility Scripts & Guides
-
-### [mysql-ispconf-trick](mysql-ispconf-trick.md)
-
-**ISPConfig MySQL Password Extraction** - Handy Ansible tasks to parse and extract MySQL passwords from ISPConfig configuration files for use in database automation tasks.
-
-### [claude-split-format-guide](roles/claude_sectest/guides/claude-split-format-guide.md)
-
-**Multi-file Project Format** - Guide for formatting consolidated files that can be processed by the claude-split.py script to create proper directory structures from Claude AI generated code.
-
 ## Security Analysis Guides
 
-The collection includes comprehensive security analysis frameworks:
+The collection includes comprehensive security analysis frameworks in the claude_sectest role:
 
 - **[ISPConfig Audit Guide](roles/claude_sectest/guides/ispconfig_audit_guide.md)** - Professional security analysis criteria
 - **[MySQL Hardening Guide](roles/claude_sectest/guides/mysql_hardening_guide.md)** - Database security assessment framework  
 - **[Fail2Ban Audit Guide](roles/claude_sectest/guides/fail2ban_audit_guide.md)** - Intrusion prevention analysis
 - **[BIND/Named Audit Guide](roles/claude_sectest/guides/named_audit_guide.md)** - DNS security evaluation
+- **[SSH Hardening Guide](roles/claude_sectest/guides/ssh_hardening_guide.md)** - SSH security enhancement companion
+
+## Testing Framework
+
+### Multi-Environment Testing
+
+- **Molecule Integration**: Container and VM-based testing scenarios
+- **Cross-Platform Validation**: Debian, Ubuntu, Rocky Linux support
+- **Git-Based Versioning**: Configuration change tracking and rollback capabilities
+
+### Verification Levels
+
+- **Component Testing**: Individual role functionality
+- **Integration Testing**: Role interaction validation  
+- **System Testing**: Complete stack verification
+
+## AI-Powered Security Analysis
+
+Many roles in this collection are designed to work with Claude AI for professional security analysis. The audit scripts and security guides provide structured output that Claude can analyze to deliver expert-level security recommendations, compliance assessments, and specific remediation steps.
+
+**Key Benefits:**
+
+- **Professional Expertise**: Trained on security standards (PCI DSS, NIST, CIS)
+- **Cost-Effective**: $20/month vs $200/hour security consultants
+- **24/7 Availability**: Get analysis anytime, not just business hours
+- **Actionable Results**: Specific commands and priority-ranked recommendations
 
 ## Installation
 
@@ -80,6 +117,16 @@ ansible-galaxy collection install jackaltx.solti_ensemble
     - jackaltx.solti_ensemble.mariadb
 ```
 
+## Part of the SOLTI Ecosystem
+
+This collection is part of the broader SOLTI (Systems Oriented Laboratory Testing & Integration) framework:
+
+- **solti-monitoring**: System monitoring and metrics collection
+- **solti-ensemble**: Support tools and shared utilities (this collection)
+- **solti-conductor**: Proxmox management and orchestration
+- **solti-containers**: Testing containers
+- **solti-score**: Documentation and playbooks
+
 ## License
 
 MIT-0 - Use freely for any purpose without restriction.
@@ -88,9 +135,5 @@ MIT-0 - Use freely for any purpose without restriction.
 
 - **jackaltx** - Retired but not dead wet-ware dreamer
 - **Claude AI** - AI-powered development assistant
-
-## Professional Security Analysis
-
-Many roles in this collection are designed to work with Claude AI for professional security analysis. The audit scripts and guides provide structured output that Claude can analyze to give you expert-level security recommendations.
 
 *Want to try professional AI-powered security analysis? [Sign up for Claude with my referral](https://claude.ai/referral/T7Fxp0WbSQ) if ya want!*
