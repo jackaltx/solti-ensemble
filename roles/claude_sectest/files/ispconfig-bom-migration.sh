@@ -4,7 +4,7 @@
 # Migration Verification Version - Extracts key data for migration verification
 # Compatible with ispconfig-audit.sh command line interface
 
-SCRIPT_VERSION="2.2"
+SCRIPT_VERSION="2.4"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
 
@@ -12,6 +12,13 @@ HOSTNAME=$(hostname)
 AUDIT_DIR=""
 RETAIN_COMMITS=""
 OUTPUT_FILENAME="ispconfig-bom-config.json"
+
+# Global variables for database connection
+DB_USER=""
+DB_PASSWORD=""
+DB_DATABASE=""
+DB_HOST=""
+DB_AUTH_METHOD=""
 
 # Usage function
 usage() {
@@ -60,19 +67,120 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Check if MySQL is available
+# Parse ISPConfig credentials with robust regex
+parse_ispconfig_credentials() {
+    local config_file="/usr/local/ispconfig/server/lib/config.inc.php"
+    
+    if [[ ! -f "$config_file" ]]; then
+        echo "ISPConfig config file not found: $config_file" >&2
+        return 1
+    fi
+    
+    echo "Parsing ISPConfig credentials from: $config_file"
+    
+    # Use sed for precise parsing - match only $conf assignments, not define() statements
+    DB_USER=$(grep "^\$conf\['db_user'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
+    DB_PASSWORD=$(grep "^\$conf\['db_password'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
+    DB_DATABASE=$(grep "^\$conf\['db_database'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
+    DB_HOST=$(grep "^\$conf\['db_host'\]" "$config_file" | sed "s/.*= *'//" | sed "s/';.*//")
+    
+    # Debug output (remove password for security)
+    echo "Parsed credentials:"
+    echo "  DB_USER: '$DB_USER'"
+    echo "  DB_DATABASE: '$DB_DATABASE'"
+    echo "  DB_HOST: '$DB_HOST'"
+    echo "  DB_PASSWORD: [$(echo -n "$DB_PASSWORD" | wc -c) characters]"
+    
+    # Validate that we got the essential credentials
+    if [[ -z "$DB_USER" || -z "$DB_DATABASE" ]]; then
+        echo "ERROR: Failed to parse essential database credentials" >&2
+        echo "Expected format: \$conf['db_user'] = 'username';" >&2
+        return 1
+    fi
+    
+    return 0
+}
+
+# Enhanced dependency checking with better error messages
 check_dependencies() {
+    local missing_tools=()
+    
     if ! command -v mysql &> /dev/null; then
-        echo "ERROR: MySQL client is required but not found" >&2
+        missing_tools+=("mysql-client")
+    fi
+    
+    if [[ ${#missing_tools[@]} -gt 0 ]]; then
+        echo "ERROR: Missing required tools: ${missing_tools[*]}" >&2
+        echo "Install with: apt-get install ${missing_tools[*]}" >&2
+        exit 1
+    fi
+    
+    # Parse ISPConfig credentials
+    if ! parse_ispconfig_credentials; then
         exit 1
     fi
     
     # Test database connectivity
-    if ! mysql -e "SELECT 1;" dbispconfig &> /dev/null; then
-        echo "ERROR: Cannot connect to ISPConfig database 'dbispconfig'" >&2
-        echo "Check database connectivity and permissions" >&2
+    echo "Testing database connectivity..."
+    
+    local test_output
+    local test_error
+    
+    # Build connection string
+    local mysql_args=()
+    mysql_args+=("-u" "$DB_USER")
+    
+    if [[ -n "$DB_PASSWORD" ]]; then
+        mysql_args+=("-p$DB_PASSWORD")
+    fi
+    
+    if [[ -n "$DB_HOST" && "$DB_HOST" != "localhost" ]]; then
+        mysql_args+=("-h" "$DB_HOST")
+    fi
+    
+    mysql_args+=("$DB_DATABASE")
+    
+    # Test connection
+    if test_output=$(mysql "${mysql_args[@]}" -e "SELECT 1 as test;" 2>&1); then
+        echo "✓ Database connection successful"
+        DB_AUTH_METHOD="ispconfig_credentials"
+        return 0
+    else
+        echo "✗ Database connection failed" >&2
+        echo "Connection details:" >&2
+        echo "  User: $DB_USER" >&2
+        echo "  Database: $DB_DATABASE" >&2
+        echo "  Host: $DB_HOST" >&2
+        echo "" >&2
+        echo "MySQL error output:" >&2
+        echo "$test_output" >&2
+        echo "" >&2
+        echo "Troubleshooting steps:" >&2
+        echo "1. Verify MySQL service: systemctl status mysql" >&2
+        echo "2. Test connection manually: mysql -u '$DB_USER' -p '$DB_DATABASE'" >&2
+        echo "3. Check user permissions: SHOW GRANTS FOR '$DB_USER'@'localhost';" >&2
+        echo "4. Verify database exists: SHOW DATABASES;" >&2
         exit 1
     fi
+}
+
+# Build MySQL command with proper escaping
+build_mysql_command() {
+    local mysql_cmd="mysql"
+    
+    mysql_cmd="$mysql_cmd -u '$DB_USER'"
+    
+    if [[ -n "$DB_PASSWORD" ]]; then
+        mysql_cmd="$mysql_cmd -p'$DB_PASSWORD'"
+    fi
+    
+    if [[ -n "$DB_HOST" && "$DB_HOST" != "localhost" ]]; then
+        mysql_cmd="$mysql_cmd -h '$DB_HOST'"
+    fi
+    
+    mysql_cmd="$mysql_cmd '$DB_DATABASE'"
+    
+    echo "$mysql_cmd"
 }
 
 # Setup audit directory and git repo
@@ -264,7 +372,7 @@ finalize_audit() {
 # Main execution
 echo "Starting ISPConfig3 Database BOM Audit..."
 
-# Check dependencies
+# Check dependencies and parse credentials
 check_dependencies
 
 # Setup the audit repository
@@ -276,10 +384,23 @@ echo "Output file: $OUTPUT_FILE"
 # Generate the migration verification SQL
 generate_migration_script
 
-# Run the migration verification query
+# Build the appropriate MySQL command
+MYSQL_CMD=$(build_mysql_command)
+
+# Run the migration verification query with enhanced error checking
 echo "Extracting ISPConfig migration verification data..."
-if mysql dbispconfig < /tmp/ispconfig-migration-verifier.sql > "$OUTPUT_FILE" 2>/dev/null; then
-    echo "Migration verification completed successfully!"
+echo "Using authentication: $DB_USER@$DB_HOST/$DB_DATABASE"
+
+# Use a more direct approach with proper error capture
+mysql_exit_code=0
+if mysql -u "$DB_USER" -p"$DB_PASSWORD" "$DB_DATABASE" < /tmp/ispconfig-migration-verifier.sql > "$OUTPUT_FILE" 2>/tmp/mysql_error.log; then
+    mysql_exit_code=0
+else
+    mysql_exit_code=$?
+fi
+
+if [[ $mysql_exit_code -eq 0 ]]; then
+    echo "✓ Migration verification completed successfully!"
     echo "Report saved to: $OUTPUT_FILE"
     echo ""
     echo "Quick Migration Checklist:"
@@ -293,16 +414,33 @@ if mysql dbispconfig < /tmp/ispconfig-migration-verifier.sql > "$OUTPUT_FILE" 2>
     if command -v wc &> /dev/null; then
         echo "- Report contains $(wc -l < "$OUTPUT_FILE") lines of data"
     fi
-else
-    echo "ERROR: Migration verification failed" >&2
-    echo "Check database connectivity and permissions" >&2
+    
     # Clean up temporary files
-    rm -f /tmp/ispconfig-migration-verifier.sql
+    rm -f /tmp/ispconfig-migration-verifier.sql /tmp/mysql_error.log
+    
+    # Finalize git tracking and apply retention
+    finalize_audit
+else
+    echo "✗ ERROR: Migration verification failed (exit code: $mysql_exit_code)" >&2
+    if [[ -f /tmp/mysql_error.log ]]; then
+        echo "" >&2
+        echo "MySQL Error Details:" >&2
+        cat /tmp/mysql_error.log >&2
+    fi
+    echo "" >&2
+    echo "Connection Details:" >&2
+    echo "- User: $DB_USER" >&2
+    echo "- Database: $DB_DATABASE" >&2
+    echo "- Host: $DB_HOST" >&2
+    echo "- Password length: $(echo -n "$DB_PASSWORD" | wc -c) characters" >&2
+    echo "" >&2
+    echo "Troubleshooting:" >&2
+    echo "1. Test manual connection: mysql -u '$DB_USER' -p '$DB_DATABASE'" >&2
+    echo "2. Verify user permissions: mysql -u root -p -e \"SHOW GRANTS FOR '$DB_USER'@'localhost';\"" >&2
+    echo "3. Check database exists: mysql -u root -p -e \"SHOW DATABASES;\" | grep '$DB_DATABASE'" >&2
+    echo "4. Verify config file: /usr/local/ispconfig/server/lib/config.inc.php" >&2
+    
+    # Clean up temporary files
+    rm -f /tmp/ispconfig-migration-verifier.sql /tmp/mysql_error.log
     exit 1
 fi
-
-# Clean up temporary files
-rm -f /tmp/ispconfig-migration-verifier.sql
-
-# Finalize git tracking and apply retention
-finalize_audit
