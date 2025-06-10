@@ -1,9 +1,9 @@
 ---
 all:
   vars:
-    domain: a0a0.org
+    domain: example.com
     mylab_nolog: "{{ cluster_secure_log | bool | default(true) }}"
-    ansible_user: lavender
+    ansible_user: my_local_provisioning_username
     ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 
     # basically non-ssh stuff, like LXC containers
@@ -15,16 +15,16 @@ all:
       # .........................................
       # mylab hosts
       hosts:
-        monitor11:
-          ansible_host: 192.168.55.11 # "monitor11.{{ domain }}"
+        monitor:
+          ansible_host: 10.0.0.11
 
-        inara:
-          ansible_host: "inara.{{ domain }}"
+        cow1:
+          ansible_host: "cow1.{{ domain }}"
 
       # .........................................
       # mylab vars
       vars:
-        telegraf_outputs: []
+        telegraf_outputs: ["10.0.0.1"]
 
       children:
         # .....................................
