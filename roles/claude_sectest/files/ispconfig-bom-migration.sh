@@ -11,7 +11,7 @@ HOSTNAME=$(hostname)
 # Default values
 AUDIT_DIR=""
 RETAIN_COMMITS=""
-OUTPUT_FILENAME="ispconfig-bom-config.json"
+OUTPUT_FILENAME="ispconfig-bom-migration.json"
 
 # Usage function
 usage() {
