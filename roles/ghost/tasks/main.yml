@@ -1,3 +1,182 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for ghost
+# =============================================================================
+# Installation Block
+# =============================================================================
+- name: Install Ghost CMS
+  when: ghost_state == 'present'
+  block:
+    # Check if Ghost is already installed
+    - name: Check if Ghost is already installed
+      ansible.builtin.stat:
+        path: "{{ ghost_app_dir }}/.ghost-cli"
+      register: ghost_installed
+
+    # Install only if not already installed or forced
+    - name: Install and configure Ghost
+      when: not ghost_installed.stat.exists or ghost_force_reinstall
+      block:
+        # Install Node.js and npm
+        - name: Install Node.js and npm
+          ansible.builtin.include_tasks: nodejs.yml
+
+        # SMELL: user cannot be "ghost"
+
+        - name: Ensure blogger group exists
+          ansible.builtin.group:
+            name: "{{ ghost_blogger_group }}"
+            state: present
+
+        # Create Ghost user with limited sudo
+        - name: Create Ghost user
+          ansible.builtin.user:
+            name: "{{ ghost_blogger }}"
+            group: "{{ ghost_blogger_group }}"
+            system: true
+            shell: /bin/bash
+            create_home: true
+            state: present
+          become: true
+
+        # NOTE: Configure sudo for the install
+        #
+        - name: Create temporary broad sudoers rule for Ghost installation
+          ansible.builtin.copy:
+            content: |
+              # Temporary broad access for Ghost CLI installation
+              {{ ghost_blogger }} ALL=(ALL) NOPASSWD: ALL
+            dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+            owner: root
+            group: root
+            mode: "0440"
+            validate: "visudo -cf %s"
+          become: true
+
+        # Create Ghost application directory
+        - name: Create Ghost installation directory
+          ansible.builtin.file:
+            path: "{{ ghost_app_dir }}"
+            state: directory
+            owner: "{{ ghost_blogger }}"
+            group: "{{ ghost_blogger_group }}"
+            mode: "0755"
+          become: true
+
+        # Install Ghost using Ghost CLI (this does most of the work!)
+        - name: Install Ghost using Ghost CLI
+          ansible.builtin.shell: |
+            ghost install {% if ghost_version != 'latest' %}{{ ghost_version }}{% endif %} \
+              --url {{ ghost_site_url }} \
+              --admin-email {{ ghost_admin_email }} \
+              --port {{ ghost_app_port }} \
+              --ip {{ ghost_host }} \
+              --db {{ ghost_db_type }} \
+              {% if ghost_db_type == 'mysql' %}
+              --dbhost {{ ghost_db_host }} \
+              --dbport {{ ghost_db_port }} \
+              --dbuser {{ ghost_db_user }} \
+              --dbpass {{ ghost_db_password }} \
+              --dbname {{ ghost_db_name }} \
+              {% endif %}
+              --process systemd \
+              --no-prompt \
+              --no-color \
+              --no-setup-nginx \
+              --no-setup-ssl \
+              --no-setup-mysql \
+              --auto \
+              --pname "{{ ghost_config_name }}" \
+              --dir {{ ghost_app_dir }}
+          args:
+            chdir: "{{ ghost_app_dir }}"
+          become: true
+          become_user: "{{ ghost_blogger }}"
+          environment:
+            NODE_ENV: production
+          register: ghost_install_result
+
+        # Configure sudo for Ghost user to manage systemd services
+        - name: Create sudoers file for Ghost user
+          ansible.builtin.copy:
+            content: |
+              # Allow ghost user to manage Ghost systemd services without password
+              {{ ghost_blogger }} ALL=(ALL) NOPASSWD: /bin/systemctl * ghost_*
+            dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+            owner: root
+            group: root
+            mode: "0440"
+            validate: "visudo -cf %s"
+          become: true
+
+    # Determine service name (Ghost CLI creates service with specific naming)
+    # TODO  Claude chose the smart name, hopfully /config
+    # Note  --pname option prepends ghost_
+    #
+    - name: Set Ghost service name
+      ansible.builtin.set_fact:
+        ghost_service_name: "ghost_{{ ghost_config_name }}"
+
+    # Always ensure service is running
+    - name: Ensure Ghost service is started
+      ansible.builtin.systemd_service:
+        name: "{{ ghost_service_name }}"
+        state: started
+        enabled: true
+      become: true
+
+# =============================================================================
+# Removal Block
+# =============================================================================
+- name: Remove Ghost CMS
+  when: ghost_state == 'absent'
+  block:
+    #
+    # NOTE: Configure sudo for the uninstall
+    #
+    - name: Create temporary broad sudoers rule for Ghost removal
+      become: true
+      ansible.builtin.copy:
+        content: |
+          # Temporary broad access for Ghost CLI installation
+          {{ ghost_blogger }} ALL=(ALL) NOPASSWD: ALL
+        dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    # Use Ghost CLI to uninstall (this handles service removal too)
+    # NOTE: Uninstall must be done inside of the ghost app directory
+    #
+    - name: Uninstall Ghost using Ghost CLI
+      ansible.builtin.shell: ghost uninstall --no-prompt --force
+      args:
+        chdir: "{{ ghost_app_dir }}"
+      become: true
+      become_user: "{{ ghost_blogger }}"
+      ignore_errors: true
+
+    # Remove sudoers file when removing everything
+    - name: Remove sudoers file for Ghost user
+      become: true
+      ansible.builtin.file:
+        path: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+        state: absent
+
+    # Remove installation directory if requested
+    - name: Remove Ghost installation directory
+      ansible.builtin.file:
+        path: "{{ ghost_app_dir }}"
+        state: absent
+      become: true
+      when: ghost_delete_data
+
+    # Remove Ghost user if requested (only if no other instances)
+    - name: Remove Ghost user
+      ansible.builtin.user:
+        name: "{{ ghost_blogger }}"
+        state: absent
+        remove: true
+      become: true
+      when:
+        - ghost_delete_data
+        - ghost_remove_user | default(false)

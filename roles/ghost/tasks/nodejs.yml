@@ -1,0 +1,112 @@
+---
+# Node.js installation tasks
+
+- name: Install Node.js on Debian/Ubuntu
+  when: ansible_os_family == "Debian"
+  become: true
+  block:
+    - name: Install curl and gnupg2
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gnupg2
+        state: present
+        update_cache: true
+
+    - name: Download NodeSource GPG key
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
+      args:
+        creates: /usr/share/keyrings/nodesource.gpg
+
+    - name: Add NodeSource repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_{{ nodejs_version }}.x {{ ansible_distribution_release }} main"
+        state: present
+        filename: nodesource
+        update_cache: true
+
+    - name: Get available NodeSource nodejs version
+      ansible.builtin.shell: |
+        apt-cache madison nodejs | grep nodesource | head -1 | awk '{print $3}'
+      register: nodesource_version
+      changed_when: false
+
+    - name: Remove any existing nodejs package
+      ansible.builtin.apt:
+        name: nodejs
+        state: absent
+        purge: true
+      become: true
+      ignore_errors: true
+
+    - name: Install specific NodeSource nodejs version
+      ansible.builtin.apt:
+        name: "nodejs={{ nodesource_version.stdout }}"
+        state: present
+        update_cache: true
+        allow_downgrade: true
+      become: true
+      when: nodesource_version.stdout | length > 0
+
+    - name: Fail if no NodeSource version found
+      ansible.builtin.fail:
+        msg: "No NodeSource nodejs version found in repositories"
+      when: nodesource_version.stdout | length == 0
+
+- name: Install Node.js on Red Hat/Fedora
+  when: ansible_os_family == "RedHat"
+  become: true
+  block:
+    - name: Install curl
+      ansible.builtin.dnf:
+        name: curl
+        state: present
+
+    - name: Download NodeSource setup script
+      ansible.builtin.get_url:
+        url: "https://rpm.nodesource.com/setup_{{ nodejs_version }}.x"
+        dest: /tmp/nodesource_setup.sh
+        mode: "0755"
+
+    - name: Run NodeSource setup script
+      ansible.builtin.shell: /tmp/nodesource_setup.sh
+      args:
+        creates: /etc/yum.repos.d/nodesource-el.repo
+
+    - name: Install Node.js and npm
+      ansible.builtin.dnf:
+        name:
+          - nodejs
+          - npm
+        state: present
+
+    - name: Clean up setup script
+      ansible.builtin.file:
+        path: /tmp/nodesource_setup.sh
+        state: absent
+
+# Verify Node.js installation
+- name: Verify Node.js installation
+  ansible.builtin.command: node --version
+  register: node_version
+  changed_when: false
+
+- name: Verify npm installation
+  ansible.builtin.command: npm --version
+  register: npm_version
+  changed_when: false
+
+- name: Display Node.js and npm versions
+  ansible.builtin.debug:
+    msg:
+      - "Node.js version: {{ node_version.stdout }}"
+      - "npm version: {{ npm_version.stdout }}"
+
+# Install Ghost CLI globally
+- name: Install Ghost CLI globally
+  ansible.builtin.npm:
+    name: ghost-cli
+    global: true
+    state: present
+  become: true
