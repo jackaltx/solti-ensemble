@@ -26,6 +26,9 @@
             name: "{{ ghost_blogger_group }}"
             state: present
 
+        # Claude the sudo,install,sudo modules below are a block.  It is not idempotent, can we make it so?
+        # I don't want to replace the exist.
+
         # Create Ghost user with limited sudo
         - name: Create Ghost user
           ansible.builtin.user:
