@@ -94,6 +94,23 @@
             NODE_ENV: production
           register: ghost_install_result
 
+        # If the install worked, then csreate the admin user
+        - name: Setup Ghost admin user using environment variables
+          ansible.builtin.expect:
+            command: ghost setup
+            chdir: "{{ ghost_app_dir }}"
+            responses:
+              "Enter your blog URL": "{{ ghost_site_url }}"
+              "Enter your admin email address": "{{ ghost_admin_email }}"
+              "Enter your admin password": "{{ ghost_admin_password }}"
+              "Confirm your admin password": "{{ ghost_admin_password }}"
+              "Enter your admin name": "{{ ghost_admin_name }}"
+              "Enter your blog title": "{{ ghost_blog_title | default('My Ghost Blog') }}"
+          become: true
+          become_user: "{{ ghost_blogger }}"
+          when: not ghost_install_result.stat.exists and ghost_auto_setup | default(true)
+          # no_log: true # Don't log passwords
+
         # Configure sudo for Ghost user to manage systemd services
         - name: Create sudoers file for Ghost user
           ansible.builtin.copy:

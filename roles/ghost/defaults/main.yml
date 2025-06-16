@@ -6,12 +6,7 @@
 #
 ghost_state: present
 
-# System user and directories
-ghost_host: "127.0.0.1" # Always localhost for reverse proxy
-ghost_app_dir: "/opt/apps/ghost_{{ ghost_config_name }}"
-ghost_app_port: 2368
-
-# Ghost cannot use the "ghost" user.
+# Note: Ghost cannot use the "ghost" user as the ghost user runs the app
 ghost_blogger: blogger
 ghost_blogger_group: blogger
 
@@ -19,13 +14,16 @@ ghost_blogger_group: blogger
 ghost_config_name: "default"
 ghost_version: latest
 ghost_site_url: "http://example.com:{{ ghost_app_port }}"
-ghost_admin_email: "admin@localhost"
+ghost_host: "127.0.0.1" # Always localhost for reverse proxy
+ghost_app_dir: "/opt/apps/ghost_{{ ghost_config_name }}"
+ghost_app_port: 2368
 
 # This version is per https://ghost.org/docs/faq/node-versions/
-# SMELL: how do I check for changes???
+# SMELL: per docs is 20, but only 20.5 is available in the repo, requires 22.11+
+# NOTE: Ghost is picky, only supports even number releases.
 #
 # Node.js configuration
-nodejs_version: "18" # LTS version recommended for Ghost
+nodejs_version: "18" # LTS version that works on Deb12
 
 # Using ISPConfig mysql.
 # SMELL:  pgsql has been released. review.
@@ -73,3 +71,10 @@ ghost_remove_user: false # Only remove user if this is the last Ghost instance
 
 # Package installation options
 ghost_force_reinstall: false
+
+# Admin user configuration
+ghost_admin_name: "Admin User"
+ghost_admin_password: "" # Should be set via vault
+ghost_blog_title: "My Ghost Blog"
+ghost_admin_email: "admin@localhost"
+ghost_auto_setup: true # Whether to automatically create admin user
