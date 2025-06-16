@@ -19,8 +19,7 @@
         - name: Install Node.js and npm
           ansible.builtin.include_tasks: nodejs.yml
 
-        # SMELL: user cannot be "ghost"
-
+        # NOTE: user cannot be "ghost"
         - name: Ensure blogger group exists
           ansible.builtin.group:
             name: "{{ ghost_blogger_group }}"
@@ -111,7 +110,7 @@
               "Enter your blog title": "{{ ghost_blog_title | default('My Ghost Blog') }}"
           become: true
           become_user: "{{ ghost_blogger }}"
-          when: not ghost_install_result.stat.exists and ghost_auto_setup | default(true)
+          when: not ghost_install_result.stat.exists and ghost_auto_setup | default(true)  <---- Claude fix this when condition
           # no_log: true # Don't log passwords
 
         # Configure sudo for Ghost user to manage systemd services
@@ -164,8 +163,7 @@
         mode: "0440"
         validate: "visudo -cf %s"
 
-    # Use Ghost CLI to uninstall (this handles service removal too)
-    # NOTE: Uninstall must be done inside of the ghost app directory
+    # Claude:  don't replace it if it exists   I need idempotent
     #
     - name: Uninstall Ghost using Ghost CLI
       ansible.builtin.shell: ghost uninstall --no-prompt --force
