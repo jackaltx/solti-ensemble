@@ -56,6 +56,7 @@
         msg: "No NodeSource nodejs version found in repositories"
       when: nodesource_version.stdout | length == 0
 
+# ===========================================================================
 - name: Install Node.js on Red Hat/Fedora
   when: ansible_os_family == "RedHat"
   become: true

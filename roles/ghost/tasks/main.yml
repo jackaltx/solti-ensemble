@@ -11,6 +11,7 @@
         path: "{{ ghost_app_dir }}/.ghost-cli"
       register: ghost_installed
 
+    # ........................................................................
     # Install only if not already installed or forced
     - name: Install and configure Ghost
       when: not ghost_installed.stat.exists or ghost_force_reinstall
@@ -39,108 +40,123 @@
             state: present
           become: true
 
-        # NOTE: Configure sudo for the install
+        # .........................................................................................
+        - name: Check if Ghost config.production.json exists (indicates Ghost is installed)
+          ansible.builtin.stat:
+            path: "{{ ghost_app_dir }}/config.production.json"
+          register: ghost_package_exists
+
+        - name: Install Ghost blog
+          when: not ghost_package_exists.stat.exists
+          block:
+            #
+            # NOTE: Configure sudo for the install
+            #
+            - name: Create temporary broad sudoers rule for Ghost installation
+              ansible.builtin.copy:
+                content: |
+                  # Temporary broad access for Ghost CLI installation
+                  {{ ghost_blogger }} ALL=(ALL) NOPASSWD: ALL
+                dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+                owner: root
+                group: root
+                mode: "0440"
+                validate: "visudo -cf %s"
+              become: true
+
+            # Create Ghost application directory
+            - name: Create Ghost installation directory
+              ansible.builtin.file:
+                path: "{{ ghost_app_dir }}"
+                state: directory
+                owner: "{{ ghost_blogger }}"
+                group: "{{ ghost_blogger_group }}"
+                mode: "0755"
+              become: true
+
+            # Install Ghost using Ghost CLI (this does most of the work!)
+            - name: Install Ghost using Ghost CLI
+              ansible.builtin.shell: |
+                ghost install {% if ghost_version != 'latest' %}{{ ghost_version }}{% endif %} \
+                  --url {{ ghost_site_url }} \
+                  --admin-email {{ ghost_admin_email }} \
+                  --port {{ ghost_app_port }} \
+                  --ip {{ ghost_host }} \
+                  --db {{ ghost_db_type }} \
+                  {% if ghost_db_type == 'mysql' %}
+                  --dbhost {{ ghost_db_host }} \
+                  --dbport {{ ghost_db_port }} \
+                  --dbuser {{ ghost_db_user }} \
+                  --dbpass {{ ghost_db_password }} \
+                  --dbname {{ ghost_db_name }} \
+                  {% endif %}
+                  --process systemd \
+                  --no-prompt \
+                  --no-color \
+                  --no-setup-nginx \
+                  --no-setup-ssl \
+                  --no-setup-mysql \
+                  --auto \
+                  --pname "{{ ghost_config_name }}" \
+                  --dir {{ ghost_app_dir }}
+              args:
+                chdir: "{{ ghost_app_dir }}"
+              become: true
+              become_user: "{{ ghost_blogger }}"
+              environment:
+                NODE_ENV: production
+              register: ghost_install_result
+
+            # If the install worked, then csreate the admin user
+            - name: Setup Ghost admin user using environment variables
+              ansible.builtin.expect:
+                command: ghost setup
+                chdir: "{{ ghost_app_dir }}"
+                responses:
+                  "Enter your blog URL": "{{ ghost_site_url }}"
+                  "Enter your admin email address": "{{ ghost_admin_email }}"
+                  "Enter your admin password": "{{ ghost_admin_password }}"
+                  "Confirm your admin password": "{{ ghost_admin_password }}"
+                  "Enter your admin name": "{{ ghost_admin_name }}"
+                  "Enter your blog title": "{{ ghost_blog_title | default('My Ghost Blog') }}"
+              become: true
+              become_user: "{{ ghost_blogger }}"
+              when:
+                - ghost_auto_setup | default(true)
+                - ghost_admin_password | length > 0
+                - (ghost_db_type == 'sqlite3' and not ghost_configured.stat.exists) or
+                  (ghost_db_type == 'mysql' and (ghost_mysql_users.stdout | default('0') | int == 0))
+              # no_log: true # Don't log passwords
+
+            # Create restrictive sudoers file for Ghost user
+            - name: Create sudoers file for Ghost user
+              ansible.builtin.copy:
+                content: |
+                  # Allow ghost user to manage Ghost systemd services without password
+                  {{ ghost_blogger }} ALL=(ALL) NOPASSWD: /bin/systemctl * ghost_*
+                dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
+                owner: root
+                group: root
+                mode: "0440"
+                validate: "visudo -cf %s"
+              become: true
+
+        # ......................................................................................
+        # Determine service name (Ghost CLI creates service with specific naming)
+        # TODO  Claude chose the smart name, hopfully /config
+        # Note  --pname option prepends ghost_
         #
-        - name: Create temporary broad sudoers rule for Ghost installation
-          ansible.builtin.copy:
-            content: |
-              # Temporary broad access for Ghost CLI installation
-              {{ ghost_blogger }} ALL=(ALL) NOPASSWD: ALL
-            dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
-            owner: root
-            group: root
-            mode: "0440"
-            validate: "visudo -cf %s"
+        - name: Set Ghost service name
+          ansible.builtin.set_fact:
+            ghost_service_name: "ghost_{{ ghost_config_name }}"
+
+        # Always ensure service is running
+        - name: Ensure Ghost service is started
+          ansible.builtin.systemd_service:
+            name: "{{ ghost_service_name }}"
+            state: started
+            enabled: true
           become: true
-
-        # Create Ghost application directory
-        - name: Create Ghost installation directory
-          ansible.builtin.file:
-            path: "{{ ghost_app_dir }}"
-            state: directory
-            owner: "{{ ghost_blogger }}"
-            group: "{{ ghost_blogger_group }}"
-            mode: "0755"
-          become: true
-
-        # Install Ghost using Ghost CLI (this does most of the work!)
-        - name: Install Ghost using Ghost CLI
-          ansible.builtin.shell: |
-            ghost install {% if ghost_version != 'latest' %}{{ ghost_version }}{% endif %} \
-              --url {{ ghost_site_url }} \
-              --admin-email {{ ghost_admin_email }} \
-              --port {{ ghost_app_port }} \
-              --ip {{ ghost_host }} \
-              --db {{ ghost_db_type }} \
-              {% if ghost_db_type == 'mysql' %}
-              --dbhost {{ ghost_db_host }} \
-              --dbport {{ ghost_db_port }} \
-              --dbuser {{ ghost_db_user }} \
-              --dbpass {{ ghost_db_password }} \
-              --dbname {{ ghost_db_name }} \
-              {% endif %}
-              --process systemd \
-              --no-prompt \
-              --no-color \
-              --no-setup-nginx \
-              --no-setup-ssl \
-              --no-setup-mysql \
-              --auto \
-              --pname "{{ ghost_config_name }}" \
-              --dir {{ ghost_app_dir }}
-          args:
-            chdir: "{{ ghost_app_dir }}"
-          become: true
-          become_user: "{{ ghost_blogger }}"
-          environment:
-            NODE_ENV: production
-          register: ghost_install_result
-
-        # If the install worked, then csreate the admin user
-        - name: Setup Ghost admin user using environment variables
-          ansible.builtin.expect:
-            command: ghost setup
-            chdir: "{{ ghost_app_dir }}"
-            responses:
-              "Enter your blog URL": "{{ ghost_site_url }}"
-              "Enter your admin email address": "{{ ghost_admin_email }}"
-              "Enter your admin password": "{{ ghost_admin_password }}"
-              "Confirm your admin password": "{{ ghost_admin_password }}"
-              "Enter your admin name": "{{ ghost_admin_name }}"
-              "Enter your blog title": "{{ ghost_blog_title | default('My Ghost Blog') }}"
-          become: true
-          become_user: "{{ ghost_blogger }}"
-          when: not ghost_install_result.stat.exists and ghost_auto_setup | default(true)  <---- Claude fix this when condition
-          # no_log: true # Don't log passwords
-
-        # Configure sudo for Ghost user to manage systemd services
-        - name: Create sudoers file for Ghost user
-          ansible.builtin.copy:
-            content: |
-              # Allow ghost user to manage Ghost systemd services without password
-              {{ ghost_blogger }} ALL=(ALL) NOPASSWD: /bin/systemctl * ghost_*
-            dest: "/etc/sudoers.d/ghost_{{ ghost_config_name }}"
-            owner: root
-            group: root
-            mode: "0440"
-            validate: "visudo -cf %s"
-          become: true
-
-    # Determine service name (Ghost CLI creates service with specific naming)
-    # TODO  Claude chose the smart name, hopfully /config
-    # Note  --pname option prepends ghost_
-    #
-    - name: Set Ghost service name
-      ansible.builtin.set_fact:
-        ghost_service_name: "ghost_{{ ghost_config_name }}"
-
-    # Always ensure service is running
-    - name: Ensure Ghost service is started
-      ansible.builtin.systemd_service:
-        name: "{{ ghost_service_name }}"
-        state: started
-        enabled: true
-      become: true
 
 # =============================================================================
 # Removal Block
