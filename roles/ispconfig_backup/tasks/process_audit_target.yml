@@ -1,0 +1,159 @@
+---
+# =====================================================================================================
+# Process individual audit target
+
+- name: Update audit summary counter
+  ansible.builtin.set_fact:
+    audit_summary: "{{ audit_summary | combine({'total_targets': audit_summary.total_targets + 1}) }}"
+
+- name: Check if source path exists
+  ansible.builtin.stat:
+    path: "{{ audit_target.path }}"
+  register: current_source_stat
+
+- name: Check if backup exists
+  ansible.builtin.stat:
+    path: "{{ ispconfig_backup_git.repository_path }}/fingerprints/{{ audit_target.name }}.fingerprints"
+  register: backup_fingerprints_stat
+
+# =====================================================================================================
+# Handle missing source
+
+- name: Handle missing source path
+  when: not current_source_stat.stat.exists
+  block:
+    - name: Update audit summary for missing source
+      ansible.builtin.set_fact:
+        audit_summary: "{{ audit_summary | combine({'missing_source': audit_summary.missing_source + 1}) }}"
+
+    - name: Add missing source result
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{'name': audit_target.name, 'status': 'MISSING_SOURCE', 'details': '(source path does not exist)'}] }}"
+
+# =====================================================================================================
+# Handle missing backup
+
+- name: Handle missing backup
+  when: current_source_stat.stat.exists and not backup_fingerprints_stat.stat.exists
+  block:
+    - name: Update audit summary for missing backup
+      ansible.builtin.set_fact:
+        audit_summary: "{{ audit_summary | combine({'missing_backup': audit_summary.missing_backup + 1}) }}"
+
+    - name: Add missing backup result
+      ansible.builtin.set_fact:
+        audit_results: "{{ audit_results + [{'name': audit_target.name, 'status': 'MISSING_BACKUP', 'details': '(no backup found)'}] }}"
+
+# =====================================================================================================
+# Compare current vs backup when both exist
+
+- name: Compare current configuration vs backup
+  when: current_source_stat.stat.exists and backup_fingerprints_stat.stat.exists
+  block:
+    - name: Generate current fingerprints for {{ audit_target.name }}
+      ansible.builtin.shell: |
+        if [ -d "{{ audit_target.path }}" ]; then
+          find "{{ audit_target.path }}" -type f \
+          {% for pattern in audit_target.exclude_patterns | default([]) %}
+          ! -name '{{ pattern }}' \
+          {% endfor %}
+          -exec sha256sum {} \; | \
+          sed 's|{{ audit_target.path }}/||' | \
+          sort
+        elif [ -f "{{ audit_target.path }}" ]; then
+          sha256sum "{{ audit_target.path }}" | \
+          sed 's|{{ audit_target.path | dirname }}/||'
+        fi
+      register: current_fingerprints
+      changed_when: false
+
+    - name: Read stored fingerprints
+      ansible.builtin.slurp:
+        src: "{{ ispconfig_backup_git.repository_path }}/fingerprints/{{ audit_target.name }}.fingerprints"
+      register: stored_fingerprints_raw
+
+    - name: Decode stored fingerprints
+      ansible.builtin.set_fact:
+        stored_fingerprints: "{{ stored_fingerprints_raw.content | b64decode | trim }}"
+
+    - name: Compare fingerprints
+      ansible.builtin.set_fact:
+        fingerprints_match: "{{ current_fingerprints.stdout | trim == stored_fingerprints | trim }}"
+
+    # =====================================================================================================
+    # Handle unchanged configuration
+
+    - name: Handle unchanged configuration
+      when: fingerprints_match | bool
+      block:
+        - name: Update audit summary for unchanged
+          ansible.builtin.set_fact:
+            audit_summary: "{{ audit_summary | combine({'unchanged': audit_summary.unchanged + 1}) }}"
+
+        - name: Add unchanged result
+          ansible.builtin.set_fact:
+            audit_results: "{{ audit_results + [{'name': audit_target.name, 'status': 'UNCHANGED'}] }}"
+
+    # =====================================================================================================
+    # Handle changed configuration
+
+    - name: Handle changed configuration
+      when: not (fingerprints_match | bool)
+      block:
+        - name: Update audit summary for changed
+          ansible.builtin.set_fact:
+            audit_summary: "{{ audit_summary | combine({'changed': audit_summary.changed + 1}) }}"
+
+        - name: Count changes for {{ audit_target.name }}
+          ansible.builtin.shell: |
+            #!/bin/bash
+            echo "{{ current_fingerprints.stdout }}" > /tmp/current_{{ audit_target.name }}.tmp
+            echo "{{ stored_fingerprints }}" > /tmp/stored_{{ audit_target.name }}.tmp
+
+            # Count new, modified, and deleted files
+            NEW=$(comm -23 /tmp/current_{{ audit_target.name }}.tmp /tmp/stored_{{ audit_target.name }}.tmp | wc -l)
+            DELETED=$(comm -13 /tmp/current_{{ audit_target.name }}.tmp /tmp/stored_{{ audit_target.name }}.tmp | wc -l)
+
+            # Modified files (same filename, different hash)
+            awk '{print $2}' /tmp/current_{{ audit_target.name }}.tmp | sort > /tmp/current_files_{{ audit_target.name }}.tmp
+            awk '{print $2}' /tmp/stored_{{ audit_target.name }}.tmp | sort > /tmp/stored_files_{{ audit_target.name }}.tmp
+            comm -12 /tmp/current_files_{{ audit_target.name }}.tmp /tmp/stored_files_{{ audit_target.name }}.tmp > /tmp/common_files_{{ audit_target.name }}.tmp
+
+            MODIFIED=0
+            while read -r file; do
+              if [ -n "$file" ]; then
+                CURRENT_HASH=$(grep " $file$" /tmp/current_{{ audit_target.name }}.tmp | awk '{print $1}')
+                STORED_HASH=$(grep " $file$" /tmp/stored_{{ audit_target.name }}.tmp | awk '{print $1}')
+                if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
+                  MODIFIED=$((MODIFIED + 1))
+                fi
+              fi
+            done < /tmp/common_files_{{ audit_target.name }}.tmp
+
+            # Cleanup temp files
+            rm -f /tmp/current_{{ audit_target.name }}.tmp /tmp/stored_{{ audit_target.name }}.tmp
+            rm -f /tmp/current_files_{{ audit_target.name }}.tmp /tmp/stored_files_{{ audit_target.name }}.tmp
+            rm -f /tmp/common_files_{{ audit_target.name }}.tmp
+
+            echo "($NEW new, $MODIFIED modified, $DELETED deleted)"
+          register: change_details
+          changed_when: false
+          args:
+            executable: /bin/bash
+
+        - name: Generate diff output if requested
+          ansible.builtin.shell: |
+            if [ -d "{{ audit_target.path }}" ] && [ -d "{{ ispconfig_backup_git.repository_path }}/configs/{{ audit_target.name }}" ]; then
+              diff -r "{{ ispconfig_backup_git.repository_path }}/configs/{{ audit_target.name }}" "{{ audit_target.path }}" || true
+            elif [ -f "{{ audit_target.path }}" ] && [ -f "{{ ispconfig_backup_git.repository_path }}/configs/{{ audit_target.name }}" ]; then
+              diff "{{ ispconfig_backup_git.repository_path }}/configs/{{ audit_target.name }}" "{{ audit_target.path }}" || true
+            else
+              echo "Cannot compare: path types don't match"
+            fi
+          register: diff_output
+          changed_when: false
+          when: ispconfig_audit_show_differences | bool
+
+        - name: Add changed result
+          ansible.builtin.set_fact:
+            audit_results: "{{ audit_results + [{'name': audit_target.name, 'status': 'CHANGED', 'details': change_details.stdout | trim, 'diff_output': diff_output.stdout | default('') if ispconfig_audit_show_differences else ''}] }}"

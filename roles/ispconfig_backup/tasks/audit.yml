@@ -1,0 +1,83 @@
+---
+# =====================================================================================================
+# ISPConfig Configuration Audit Tasks
+# Compare current configurations against stored backups
+
+- name: Check if backup repository exists
+  ansible.builtin.stat:
+    path: "{{ ispconfig_backup_git.repository_path }}"
+  register: backup_repo_stat
+
+- name: Fail if backup repository does not exist
+  ansible.builtin.fail:
+    msg: "Backup repository not found at {{ ispconfig_backup_git.repository_path }}. Run backup first."
+  when: not backup_repo_stat.stat.exists
+
+- name: Initialize audit results
+  ansible.builtin.set_fact:
+    audit_results: []
+    audit_summary:
+      total_targets: 0
+      changed: 0
+      unchanged: 0
+      missing_backup: 0
+      missing_source: 0
+
+# =====================================================================================================
+# Process all audit targets
+
+- name: Process ISPConfig audit targets
+  include_tasks: process_audit_target.yml
+  loop: "{{ ispconfig_backup_targets + (ispconfig_backup_php_targets if ispconfig_backup_include_php else []) }}"
+  loop_control:
+    loop_var: audit_target
+    label: "{{ audit_target.name }}"
+  when: audit_target.condition | default(true) | bool
+
+# =====================================================================================================
+# Generate audit report
+
+- name: Display audit summary
+  ansible.builtin.debug:
+    msg: |
+      ==========================================
+      ISPConfig Configuration Audit Summary
+      ==========================================
+      Total targets: {{ audit_summary.total_targets }}
+      Changed: {{ audit_summary.changed }}
+      Unchanged: {{ audit_summary.unchanged }}
+      Missing backup: {{ audit_summary.missing_backup }}
+      Missing source: {{ audit_summary.missing_source }}
+      ==========================================
+
+- name: Display detailed results
+  ansible.builtin.debug:
+    msg: "{{ item.name }}: {{ item.status }} {{ item.details | default('') }}"
+  loop: "{{ audit_results }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Generate audit report file
+  ansible.builtin.template:
+    src: audit_report.j2
+    dest: "{{ ispconfig_backup_git.repository_path }}/LAST_AUDIT_REPORT.md"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    audit_timestamp: "{{ ansible_date_time.iso8601 }}"
+
+- name: Show differences if requested
+  when: ispconfig_audit_show_differences | bool
+  block:
+    - name: Display file differences for changed targets
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          Differences for {{ item.name }}:
+          ==========================================
+          {{ item.diff_output | default('No differences available') }}
+      loop: "{{ audit_results }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.status == "CHANGED" and item.diff_output is defined

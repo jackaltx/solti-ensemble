@@ -1,0 +1,80 @@
+---
+# defaults file for ghost
+
+# Installation state
+# states are present, remove
+#
+ghost_state: present
+
+# Note: Ghost cannot use the "ghost" user as the ghost user runs the app
+ghost_blogger: blogger
+ghost_blogger_group: blogger
+
+# Ghost instance configuration
+ghost_config_name: "default"
+ghost_version: latest
+ghost_site_url: "http://example.com:{{ ghost_app_port }}"
+ghost_host: "127.0.0.1" # Always localhost for reverse proxy
+ghost_app_dir: "/opt/apps/ghost_{{ ghost_config_name }}"
+ghost_app_port: 2368
+
+# This version is per https://ghost.org/docs/faq/node-versions/
+# SMELL: per docs is 20, but only 20.5 is available in the repo, requires 22.11+
+# NOTE: Ghost is picky, only supports even number releases.
+#
+# Node.js configuration
+nodejs_version: "18" # LTS version that works on Deb12
+
+# Using ISPConfig mysql.
+# SMELL:  pgsql has been released. review.
+#
+# Database configuration
+ghost_db_type: sqlite3 # mysql or sqlite3
+ghost_db_host: "127.0.0.1"
+ghost_db_port: 3306
+ghost_db_name: "ghost_{{ ghost_config_name }}"
+ghost_db_user: "ghost_{{ ghost_config_name }}"
+ghost_db_password: ""
+
+# This is intended to be behind an SSL proxy, but just in case.
+# It will only be tested behind a firewall
+#
+# SSL/TLS configuration
+ghost_ssl: false
+ghost_ssl_cert: ""
+ghost_ssl_key: ""
+
+# This is required for production.
+#
+# Mail configuration
+ghost_mail_from: ""
+ghost_mail_transport: ""
+ghost_mail_host: ""
+ghost_mail_port: 587
+ghost_mail_secure: false
+ghost_mail_require_tls: true
+ghost_mail_user: ""
+ghost_mail_pass: ""
+
+# SMELL Claude generated these numbers, ask why
+# Performance settings
+ghost_memory_limit: 512m
+ghost_max_old_space_size: 512
+
+# TODO Test removals. I will not be
+#
+# Cleanup options for removal
+ghost_delete_config: false
+ghost_delete_data: false
+ghost_delete_database: false
+ghost_remove_user: false # Only remove user if this is the last Ghost instance
+
+# Package installation options
+ghost_force_reinstall: false
+
+# Admin user configuration
+ghost_admin_name: "Admin User"
+ghost_admin_password: "" # Should be set via vault
+ghost_blog_title: "My Ghost Blog"
+ghost_admin_email: "admin@localhost"
+ghost_auto_setup: true # Whether to automatically create admin user
