@@ -1,0 +1,15 @@
+---
+# tasks file for ispconfig_backup
+
+# Route to appropriate task based on state
+- name: Install and configure ispconfig_backup
+  when: ispconfig_backup_state == "present"
+  block:
+    - name: Include backup tasks
+      include_tasks: backup.yml
+
+- name: Remove ispconfig_backup
+  when: ispconfig_backup_state == "absent"
+  block:
+    - name: Include removal tasks
+      include_tasks: remove.yml

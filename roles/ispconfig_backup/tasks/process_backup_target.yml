@@ -1,0 +1,89 @@
+---
+# =====================================================================================================
+# Process individual backup target (file or directory)
+
+- name: Debug backup target
+  ansible.builtin.debug:
+    msg: "Processing backup target: {{ backup_target.name }} ({{ backup_target.path }})"
+    verbosity: 1
+
+- name: Check if source path exists
+  ansible.builtin.stat:
+    path: "{{ backup_target.path }}"
+  register: source_path_stat
+
+- name: Process backup target when source exists
+  when: source_path_stat.stat.exists
+  block:
+    # =====================================================================================================
+    # Handle directory backup
+
+    - name: Backup directory
+      when: backup_target.type == "directory"
+      block:
+        - name: Create target directory for {{ backup_target.name }}
+          ansible.builtin.file:
+            path: "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Copy directory contents with exclusions
+          ansible.builtin.shell: |
+            rsync -av \
+            {% for pattern in backup_target.exclude_patterns | default([]) %}
+            --exclude='{{ pattern }}' \
+            {% endfor %}
+            "{{ backup_target.path }}/" \
+            "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}/"
+          register: rsync_result
+          changed_when: rsync_result.rc == 0
+          failed_when: rsync_result.rc != 0
+
+    # =====================================================================================================
+    # Handle single file backup
+
+    - name: Backup single file
+      when: backup_target.type == "file"
+      block:
+        - name: Create parent directory for {{ backup_target.name }}
+          ansible.builtin.file:
+            path: "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name | dirname }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          when: backup_target.name | dirname != backup_target.name
+
+        - name: Copy single file
+          ansible.builtin.copy:
+            src: "{{ backup_target.path }}"
+            dest: "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}"
+            owner: root
+            group: root
+            mode: preserve
+            remote_src: yes
+
+    # =====================================================================================================
+    # Generate fingerprints for all backed up content
+
+    - name: Generate fingerprints for {{ backup_target.name }}
+      ansible.builtin.shell: |
+        if [ -d "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}" ]; then
+          find "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}" -type f \
+            -exec sha256sum {} \; | \
+            sed 's|{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}/||' | \
+            sort > "{{ ispconfig_backup_git.repository_path }}/fingerprints/{{ backup_target.name }}.fingerprints"
+        elif [ -f "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}" ]; then
+          sha256sum "{{ ispconfig_backup_git.repository_path }}/configs/{{ backup_target.name }}" | \
+            sed 's|{{ ispconfig_backup_git.repository_path }}/configs/||' \
+            > "{{ ispconfig_backup_git.repository_path }}/fingerprints/{{ backup_target.name }}.fingerprints"
+        fi
+      register: fingerprint_result
+      changed_when: fingerprint_result.rc == 0
+
+- name: Log missing source path
+  ansible.builtin.debug:
+    msg: "WARNING: Source path {{ backup_target.path }} does not exist, skipping {{ backup_target.name }}"
+  when: not source_path_stat.stat.exists

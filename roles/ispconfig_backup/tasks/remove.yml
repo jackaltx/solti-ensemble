@@ -1,0 +1,35 @@
+---
+# =====================================================================================================
+# Remove ISPConfig backup repository and cleanup
+
+- name: Check if backup repository exists
+  ansible.builtin.stat:
+    path: "{{ ispconfig_backup_git.repository_path }}"
+  register: backup_repo_stat
+
+- name: Backup existing repository before removal
+  when: backup_repo_stat.stat.exists
+  block:
+    - name: Create archive of existing backup repository
+      ansible.builtin.archive:
+        path: "{{ ispconfig_backup_git.repository_path }}"
+        dest: "/root/ispconfig-backup-archive-{{ ansible_date_time.iso8601 | regex_replace(':', '-') }}.tar.gz"
+        format: gz
+        owner: root
+        group: root
+        mode: "0600"
+      register: archive_result
+
+    - name: Display archive location
+      ansible.builtin.debug:
+        msg: "Backup repository archived to: {{ archive_result.dest }}"
+
+- name: Remove backup repository
+  ansible.builtin.file:
+    path: "{{ ispconfig_backup_git.repository_path }}"
+    state: absent
+  when: backup_repo_stat.stat.exists
+
+- name: Confirm removal
+  ansible.builtin.debug:
+    msg: "ISPConfig backup repository removed successfully"

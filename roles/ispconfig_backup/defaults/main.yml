@@ -1,0 +1,87 @@
+---
+# defaults file for ispconfig_backup
+
+# Role state control
+ispconfig_backup_state: present # Options: present, absent
+
+# Git versioning configuration
+ispconfig_backup_git:
+  enabled: yes
+  repository_path: "/opt/solti-repo/ispconfig-backup"
+  commit_msg: "Configuration backup on {{ ansible_date_time.iso8601 }}"
+  manage_repository: yes
+
+# Audit configuration
+ispconfig_audit_show_differences: false # Show detailed file diffs
+ispconfig_audit_format: "summary" # summary|detailed|json
+
+# ISPConfig backup targets based on actual update analysis June 2025
+ispconfig_backup_targets:
+  # Mail Services
+  - name: "dovecot"
+    path: "/etc/dovecot"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~", "*.tmp"]
+
+  - name: "postfix"
+    path: "/etc/postfix"
+    type: "directory"
+    exclude_patterns: ["*~", "*.tmp", "*.lock"]
+
+  - name: "rspamd"
+    path: "/etc/rspamd"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~"]
+
+  # Web Services
+  - name: "apache2"
+    path: "/etc/apache2"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~", "*.tmp", "access.log*", "error.log*"]
+
+  # DNS (conditional)
+  - name: "bind"
+    path: "/etc/bind"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~", "*.jnl"]
+    condition: "{{ ispconfig_backup_include_bind | default(true) }}"
+
+  # Security/Monitoring Tools
+  - name: "jailkit"
+    path: "/etc/jailkit"
+    type: "directory"
+    exclude_patterns: ["*~"]
+
+  - name: "awstats"
+    path: "/etc/awstats"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~"]
+
+  - name: "awffull"
+    path: "/etc/awffull"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~"]
+
+  # Individual config files
+  - name: "vlogger-dbi"
+    path: "/etc/vlogger-dbi.conf"
+    type: "file"
+
+  - name: "rkhunter-defaults"
+    path: "/etc/default/rkhunter"
+    type: "file"
+
+  - name: "spamassassin-defaults"
+    path: "/etc/default/spamassassin"
+    type: "file"
+
+# Optional backup targets (can be enabled per environment)
+ispconfig_backup_include_bind: true
+ispconfig_backup_include_php: false # Can be enabled to backup /etc/php
+
+# Additional PHP backup (optional)
+ispconfig_backup_php_targets:
+  - name: "php"
+    path: "/etc/php"
+    type: "directory"
+    exclude_patterns: ["*.log", "*~", "*/tmp/*", "*/sessions/*"]

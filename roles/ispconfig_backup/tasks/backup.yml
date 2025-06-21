@@ -1,0 +1,85 @@
+---
+# =====================================================================================================
+# ISPConfig Configuration Backup Tasks
+# This handles the main backup functionality using git versioning
+
+- name: Pre-backup git repository setup
+  ansible.builtin.include_tasks:
+    file: "../../shared/git/git_versioning_pre.yml"
+  when: ispconfig_backup_git.enabled | bool
+  vars:
+    versioning:
+      component_name: "ispconfig"
+      repository_path: "{{ ispconfig_backup_git.repository_path }}"
+      config_path: "{{ ispconfig_backup_git.repository_path }}/configs"
+      manage_repository: "{{ ispconfig_backup_git.manage_repository }}"
+
+# =====================================================================================================
+# Create directory structure for organized backups
+
+- name: Create backup directory structure
+  ansible.builtin.file:
+    path: "{{ ispconfig_backup_git.repository_path }}/configs"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create fingerprints directory
+  ansible.builtin.file:
+    path: "{{ ispconfig_backup_git.repository_path }}/fingerprints"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# =====================================================================================================
+# Process all backup targets
+
+# Note:
+# Current defaults are from June 2025.  Basically I did an update and looked at /etc changes
+# Odds are this list will need to grow.
+# This design choice is to let ispconfig do it's configuration, and try to manage around it.
+# For example the ssh_hard role
+#
+# find /etc -type f -newermt "Jun 20 20:17" ! -newermt "Jun 20 20:37" ! -name "*~" -exec ls -la {} \; 2>/dev/null
+
+- name: Process ISPConfig backup targets
+  include_tasks: process_backup_target.yml
+  loop: "{{ ispconfig_backup_targets + (ispconfig_backup_php_targets if ispconfig_backup_include_php else []) }}"
+  loop_control:
+    loop_var: backup_target
+    label: "{{ backup_target.name }}"
+  when: backup_target.condition | default(true) | bool
+
+# =====================================================================================================
+# Create backup manifest and fingerprint summary
+
+- name: Generate backup manifest
+  ansible.builtin.template:
+    src: backup_manifest.j2
+    dest: "{{ ispconfig_backup_git.repository_path }}/BACKUP_MANIFEST.md"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    backup_timestamp: "{{ ansible_date_time.iso8601 }}"
+    backup_targets_processed: "{{ ispconfig_backup_targets + (ispconfig_backup_php_targets if ispconfig_backup_include_php else []) }}"
+
+# =====================================================================================================
+# Commit all changes to git
+
+- name: Post-backup git commit
+  ansible.builtin.include_tasks:
+    file: "../../shared/git/git_versioning_post.yml"
+  when: ispconfig_backup_git.enabled | bool
+  vars:
+    versioning:
+      component_name: "ispconfig"
+      repository_path: "{{ ispconfig_backup_git.repository_path }}"
+      config_path: "{{ ispconfig_backup_git.repository_path }}/configs"
+      commit_msg: "{{ ispconfig_backup_git.commit_msg }}"
+
+- name: Backup completed successfully
+  ansible.builtin.debug:
+    msg: "ISPConfig backup completed at {{ ansible_date_time.iso8601 }}"
