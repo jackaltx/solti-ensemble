@@ -106,6 +106,7 @@
 
         - name: Count changes for {{ audit_target.name }}
           ansible.builtin.shell: |
+            #!/bin/bash
             echo "{{ current_fingerprints.stdout }}" > /tmp/current_{{ audit_target.name }}.tmp
             echo "{{ stored_fingerprints }}" > /tmp/stored_{{ audit_target.name }}.tmp
 
@@ -114,24 +115,31 @@
             DELETED=$(comm -13 /tmp/current_{{ audit_target.name }}.tmp /tmp/stored_{{ audit_target.name }}.tmp | wc -l)
 
             # Modified files (same filename, different hash)
-            CURRENT_FILES=$(awk '{print $2}' /tmp/current_{{ audit_target.name }}.tmp | sort)
-            STORED_FILES=$(awk '{print $2}' /tmp/stored_{{ audit_target.name }}.tmp | sort)
-            COMMON_FILES=$(comm -12 <(echo "$CURRENT_FILES") <(echo "$STORED_FILES"))
+            awk '{print $2}' /tmp/current_{{ audit_target.name }}.tmp | sort > /tmp/current_files_{{ audit_target.name }}.tmp
+            awk '{print $2}' /tmp/stored_{{ audit_target.name }}.tmp | sort > /tmp/stored_files_{{ audit_target.name }}.tmp
+            comm -12 /tmp/current_files_{{ audit_target.name }}.tmp /tmp/stored_files_{{ audit_target.name }}.tmp > /tmp/common_files_{{ audit_target.name }}.tmp
+
             MODIFIED=0
-
-            for file in $COMMON_FILES; do
-              CURRENT_HASH=$(grep " $file$" /tmp/current_{{ audit_target.name }}.tmp | awk '{print $1}')
-              STORED_HASH=$(grep " $file$" /tmp/stored_{{ audit_target.name }}.tmp | awk '{print $1}')
-              if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
-                MODIFIED=$((MODIFIED + 1))
+            while read -r file; do
+              if [ -n "$file" ]; then
+                CURRENT_HASH=$(grep " $file$" /tmp/current_{{ audit_target.name }}.tmp | awk '{print $1}')
+                STORED_HASH=$(grep " $file$" /tmp/stored_{{ audit_target.name }}.tmp | awk '{print $1}')
+                if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
+                  MODIFIED=$((MODIFIED + 1))
+                fi
               fi
-            done
+            done < /tmp/common_files_{{ audit_target.name }}.tmp
 
+            # Cleanup temp files
             rm -f /tmp/current_{{ audit_target.name }}.tmp /tmp/stored_{{ audit_target.name }}.tmp
+            rm -f /tmp/current_files_{{ audit_target.name }}.tmp /tmp/stored_files_{{ audit_target.name }}.tmp
+            rm -f /tmp/common_files_{{ audit_target.name }}.tmp
 
             echo "($NEW new, $MODIFIED modified, $DELETED deleted)"
           register: change_details
           changed_when: false
+          args:
+            executable: /bin/bash
 
         - name: Generate diff output if requested
           ansible.builtin.shell: |
