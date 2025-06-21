@@ -29,28 +29,37 @@ This role follows the same git-versioning pattern as the fail2ban role, providin
 # Run backup
 - hosts: ispconfig_servers
   roles:
-    - ispconfig_backup
+    - jackaltx.solti_ensemble.ispconfig_backup
 
 # Run audit only
 - hosts: ispconfig_servers
   tasks:
-    - include_tasks: roles/ispconfig_backup/tasks/audit.yml
+    - include_role:
+        name: jackaltx.solti_ensemble.ispconfig_backup
+        tasks_from: audit.yml
 ```
 
 ### Pre-Update Workflow
 
 ```bash
 # 1. Check current state before maintenance
-ansible-playbook site.yml --tags ispconfig_audit
+- include_role:
+    name: jackaltx.solti_ensemble.ispconfig_backup
+    tasks_from: audit.yml
 
 # 2. Take pre-update snapshot
-ansible-playbook site.yml --tags ispconfig_backup
+- include_role:
+    name: jackaltx.solti_ensemble.ispconfig_backup
 
 # 3. Perform ISPConfig update
 # ... run your ISPConfig update ...
 
 # 4. Check what changed
-ansible-playbook site.yml --tags ispconfig_audit --extra-vars "ispconfig_audit_show_differences=true"
+- include_role:
+    name: jackaltx.solti_ensemble.ispconfig_backup
+    tasks_from: audit.yml
+    vars:
+      ispconfig_audit_show_differences: true
 ```
 
 ## Configuration
@@ -174,9 +183,11 @@ ispconfig_backup_include_php: false       # Include PHP configs
 ```yaml
 - hosts: ispconfig_servers
   tasks:
-    - include_tasks: roles/ispconfig_backup/tasks/audit.yml
-      vars:
-        ispconfig_audit_show_differences: true
+    - include_role:
+        name: jackaltx.solti_ensemble.ispconfig_backup
+        tasks_from: audit.yml
+        vars:
+          ispconfig_audit_show_differences: true
 ```
 
 ### Custom Backup Targets
@@ -236,14 +247,17 @@ Differences for postfix:
 
 1. **Pre-Update Check**
 
-   ```bash
-   ansible-playbook site.yml --tags ispconfig_audit
+   ```yaml
+   - include_role:
+       name: jackaltx.solti_ensemble.ispconfig_backup
+       tasks_from: audit.yml
    ```
 
 2. **Take Snapshot**
 
-   ```bash
-   ansible-playbook site.yml --tags ispconfig_backup
+   ```yaml
+   - include_role:
+       name: jackaltx.solti_ensemble.ispconfig_backup
    ```
 
 3. **Perform Update**
@@ -254,14 +268,19 @@ Differences for postfix:
 
 4. **Post-Update Analysis**
 
-   ```bash
-   ansible-playbook site.yml --tags ispconfig_audit --extra-vars "ispconfig_audit_show_differences=true"
+   ```yaml
+   - include_role:
+       name: jackaltx.solti_ensemble.ispconfig_backup
+       tasks_from: audit.yml
+       vars:
+         ispconfig_audit_show_differences: true
    ```
 
 5. **Update Baseline** (if changes are expected)
 
-   ```bash
-   ansible-playbook site.yml --tags ispconfig_backup
+   ```yaml
+   - include_role:
+       name: jackaltx.solti_ensemble.ispconfig_backup
    ```
 
 ## File Exclusions
