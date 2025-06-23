@@ -1,0 +1,65 @@
+# =====================================================================================================
+
+---
+# Process individual certificate target
+
+- name: "{{ cert_target.name }} - Check certificate file status"
+  ansible.builtin.stat:
+    path: "{{ cert_target.cert_path }}"
+  register: cert_file_stat
+
+- name: "{{ cert_target.name }} - Check key file status"
+  ansible.builtin.stat:
+    path: "{{ cert_target.key_path }}"
+  register: key_file_stat
+
+- name: "{{ cert_target.name }} - Initialize certificate issues"
+  ansible.builtin.set_fact:
+    cert_issues_detected: false
+    cert_issues: []
+
+# Check for symlinks (ISPConfig creates these incorrectly)
+- name: "{{ cert_target.name }} - Detect symlink issues"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['certificate_is_symlink'] }}"
+  when: 
+    - cert_file_stat.stat.exists
+    - cert_file_stat.stat.islnk
+
+- name: "{{ cert_target.name }} - Detect key symlink issues"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['key_is_symlink'] }}"
+  when: 
+    - key_file_stat.stat.exists
+    - key_file_stat.stat.islnk
+
+# Check for missing certificates
+- name: "{{ cert_target.name }} - Detect missing certificate"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['certificate_missing'] }}"
+  when: not cert_file_stat.stat.exists
+
+- name: "{{ cert_target.name }} - Detect missing key"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['key_missing'] }}"
+  when: not key_file_stat.stat.exists
+
+# Validate certificate if it exists and is not a symlink
+- name: "{{ cert_target.name }} - Validate certificate"
+  include_tasks: validate_certificate.yml
+  when: 
+    - cert_file_stat.stat.exists
+    - not cert_file_stat.stat.islnk
+    - key_file_stat.stat.exists
+    - not key_file_stat.stat.islnk
+
+# Fix certificate issues if detected
+- name: "{{ cert_target.name }} - Fix certificate issues"
+  include_tasks: fix_certificate.yml
+  when: cert_issues_detected | bool
+
+# =====================================================================================================

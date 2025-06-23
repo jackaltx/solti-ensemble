@@ -1,0 +1,56 @@
+---
+# Fix Apache security configuration using lineinfile
+
+- name: Backup existing security.conf
+  ansible.builtin.copy:
+    src: "{{ apache_security.conf_file }}"
+    dest: "{{ apache_security.conf_file }}.backup.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_security_conf_stat.stat.exists
+
+- name: Fix ServerTokens setting
+  ansible.builtin.lineinfile:
+    path: "{{ apache_security.conf_file }}"
+    regexp: '^#?ServerTokens\s+'
+    line: "ServerTokens {{ apache_security.required_settings.ServerTokens }}"
+    backup: yes
+  register: server_tokens_result
+  when: apache_parsed_directives.get('ServerTokens', '') != apache_security.required_settings.ServerTokens
+
+- name: Fix ServerSignature setting
+  ansible.builtin.lineinfile:
+    path: "{{ apache_security.conf_file }}"
+    regexp: '^#?ServerSignature\s+'
+    line: "ServerSignature {{ apache_security.required_settings.ServerSignature }}"
+    backup: yes
+  register: server_signature_result
+  when: apache_parsed_directives.get('ServerSignature', '') != apache_security.required_settings.ServerSignature
+
+- name: Determine if any changes were made
+  ansible.builtin.set_fact:
+    apache_security_config_result:
+      changed: "{{ (server_tokens_result.changed | default(false)) or (server_signature_result.changed | default(false)) }}"
+
+- name: Log Apache security fix
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "APACHE_SECURITY_FIXED issues={{ apache_security_issues | join(',') }} file={{ apache_security.conf_file }}"
+    log_level: "INFO"
+    component: "apache_security"
+    files_changed: ["{{ apache_security.conf_file }}"]
+  when: apache_security_config_result.changed
+
+- name: Update run tracking for Apache security fix
+  ansible.builtin.set_fact:
+    run_issues_fixed: "{{ run_issues_fixed | int + 1 }}"
+    run_changes_made: "{{ run_changes_made + ['apache_security_fixed'] }}"
+  when: apache_security_config_result.changed
+
+- name: Reload Apache configuration
+  ansible.builtin.systemd:
+    name: apache2
+    state: reloaded
+  when: apache_security_config_result.changed

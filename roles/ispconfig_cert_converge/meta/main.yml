@@ -1,0 +1,33 @@
+# =====================================================================================================
+
+---
+# meta file for ispconfig_cert_converge
+
+galaxy_info:
+  author: jackaltx
+  description: ISPConfig Certificate Convergence and Monitoring
+  company: Solti Ensemble
+  license: BSD-3-Clause
+  min_ansible_version: '2.9'
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - ispconfig
+    - certificates
+    - ssl
+    - acme
+    - security
+    - monitoring
+
+dependencies: []
+
+# =====================================================================================================

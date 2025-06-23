@@ -1,0 +1,33 @@
+# =====================================================================================================
+
+---
+# Query ISPConfig database for SSL-enabled websites
+
+- name: Query ISPConfig database for SSL websites
+  community.mysql.mysql_query:
+    login_host: "{{ ispconfig_db.host }}"
+    login_port: "{{ ispconfig_db.port }}"
+    login_user: "{{ ispconfig_db.user }}"
+    login_password: "{{ ispconfig_db.password }}"
+    login_db: "{{ ispconfig_db.database }}"
+    query: |
+      SELECT 
+        domain, 
+        subdomain,
+        ssl,
+        ssl_domain,
+        document_root,
+        active
+      FROM web_domain 
+      WHERE ssl = 'y' 
+        AND active = 'y'
+        AND type = 'vhost'
+  register: ssl_websites_query
+  when: enable_website_monitoring | bool
+
+- name: Set SSL websites fact
+  ansible.builtin.set_fact:
+    ispconfig_ssl_websites: "{{ ssl_websites_query.query_result[0] if ssl_websites_query.query_result else [] }}"
+  when: ssl_websites_query is defined
+
+# =====================================================================================================

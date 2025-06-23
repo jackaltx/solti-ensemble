@@ -1,0 +1,60 @@
+# =====================================================================================================
+
+---
+# Structured logging and git backup operations
+
+- name: Log to syslog with structured format
+  ansible.builtin.shell: |
+    logger -t ispconfig-cert-converge -p local1.{{ log_level | lower }} "{{ log_message }} component={{ component }}"
+
+- name: Log to file
+  ansible.builtin.lineinfile:
+    path: "{{ running_log.path }}"
+    line: "[{{ ansible_date_time.iso8601 }}] {{ log_level }}: {{ log_message }}"
+  when: running_log.log_level in ['verbose', 'issues_only']
+
+# Git backup operations (similar to ispconfig_backup pattern)
+- name: Ensure backup repository exists
+  ansible.builtin.file:
+    path: "{{ backup_repository.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: backup_repository.enabled | bool
+
+- name: Initialize git repository if needed
+  ansible.builtin.shell: |
+    if [ ! -d "{{ backup_repository.path }}/.git" ]; then
+      cd "{{ backup_repository.path }}"
+      git init
+      git config user.name "ansible-ispconfig-cert-converge"
+      git config user.email "ansible@{{ inventory_hostname }}"
+    fi
+  when: backup_repository.enabled | bool
+
+- name: Copy changed files to repository
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ backup_repository.path }}/{{ item | basename }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: preserve
+  loop: "{{ files_changed }}"
+  when: 
+    - backup_repository.enabled | bool
+    - files_changed | length > 0
+
+- name: Commit changes to git
+  ansible.builtin.shell: |
+    cd "{{ backup_repository.path }}"
+    git add .
+    if ! git diff --cached --quiet; then
+      git commit -m "{{ backup_repository.commit_msg }} - {{ log_message }}"
+    fi
+  when: 
+    - backup_repository.enabled | bool
+    - files_changed | length > 0
+
+# =====================================================================================================

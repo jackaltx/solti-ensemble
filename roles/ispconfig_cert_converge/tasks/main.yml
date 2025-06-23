@@ -1,0 +1,39 @@
+# =====================================================================================================
+
+---
+# tasks file for ispconfig_cert_converge
+
+# Initialize run tracking
+- name: Start run logging
+  include_tasks: shared/log_run_start.yml
+  vars:
+    run_start_time: "{{ ansible_date_time.iso8601 }}"
+
+# Initialize variables for tracking changes
+- name: Initialize run tracking variables
+  ansible.builtin.set_fact:
+    run_issues_fixed: 0
+    run_warnings: 0
+    run_failures: 0
+    run_changes_made: []
+
+# Route to appropriate components based on configuration
+- name: Apache Security Convergence
+  include_tasks: apache_security_convergence.yml
+  when: enable_apache_security | bool
+
+- name: Certificate Infrastructure Convergence
+  include_tasks: cert_infrastructure_convergence.yml
+  when: enable_cert_infrastructure | bool
+
+- name: Website Certificate Monitoring
+  include_tasks: website_cert_monitoring.yml
+  when: enable_website_monitoring | bool
+
+# Finalize run logging
+- name: End run logging
+  include_tasks: shared/log_run_end.yml
+  vars:
+    run_end_time: "{{ ansible_date_time.iso8601 }}"
+
+# =====================================================================================================

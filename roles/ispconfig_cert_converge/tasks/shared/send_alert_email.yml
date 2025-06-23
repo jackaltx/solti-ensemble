@@ -1,0 +1,29 @@
+# =====================================================================================================
+
+---
+# Reusable email alerting component
+
+- name: Send alert email
+  community.general.mail:
+    host: "{{ email_alerts.smtp_host }}"
+    port: "{{ email_alerts.smtp_port }}"
+    username: "{{ email_alerts.smtp_user }}"
+    password: "{{ email_alerts.smtp_password }}"
+    from: "{{ email_alerts.from_email }}"
+    to: "{{ email_alerts.to_emails }}"
+    subject: "{{ email_alerts.subject_prefix }} {{ alert_subject }}"
+    body: "{{ alert_body }}"
+    secure: starttls
+  when: email_alerts.enabled | bool
+  register: email_result
+  failed_when: false
+
+- name: Log email alert status
+  ansible.builtin.shell: |
+    if [ "{{ email_result.rc | default(0) }}" -eq 0 ]; then
+      logger -t ispconfig-cert-converge -p local1.info "EMAIL_SENT alert_type={{ alert_type }} alert_level={{ alert_level }} recipients={{ email_alerts.to_emails | join(',') }}"
+    else
+      logger -t ispconfig-cert-converge -p local1.error "EMAIL_FAILED alert_type={{ alert_type }} error='{{ email_result.msg | default('unknown') }}'"
+    fi
+
+# =====================================================================================================

@@ -1,0 +1,85 @@
+# =====================================================================================================
+
+---
+# defaults file for ispconfig_cert_converge
+
+# Component enablement
+enable_apache_security: true
+enable_cert_infrastructure: true
+enable_website_monitoring: true
+
+# Repository configuration - corrects and pushes configuration
+backup_repository:
+  path: "/opt/solti-repo/apache_converge"
+  commit_msg: "Certificate convergence on {{ ansible_date_time.iso8601 }}"
+  manage_repository: yes
+  enabled: yes
+
+# Logging configuration
+running_log:
+  path: "/var/log/ispconfig-cert-converge.log"
+  max_size: "10MB"
+  rotate: true
+  log_level: "issues_only" # options: verbose, issues_only, summary_only
+  include_run_tracking: true
+  run_timeout_warning: 300 # warn if run takes longer than 5 minutes
+
+# Apache security configuration
+apache_security:
+  conf_file: "/etc/apache2/conf-available/security.conf"
+  required_settings:
+    ServerTokens: "Prod"
+    ServerSignature: "Off"
+
+# Certificate infrastructure targets
+cert_infrastructure_targets:
+  - name: "postfix_smtp"
+    cert_path: "/etc/postfix/smtpd.cert"
+    key_path: "/etc/postfix/smtpd.key"
+    acme_domain: "mail.lavnet.net"
+    owner: "postfix"
+    group: "postfix"
+    cert_mode: "644"
+    key_mode: "600"
+    reload_services: ["postfix", "dovecot"]
+
+  - name: "ispconfig_interface"
+    cert_path: "/usr/local/ispconfig/interface/ssl/ispserver.crt"
+    key_path: "/usr/local/ispconfig/interface/ssl/ispserver.key"
+    acme_domain: "angela.lavnet.net"
+    owner: "root"
+    group: "root"
+    cert_mode: "644"
+    key_mode: "600"
+    reload_services: ["apache2"]
+
+# ISPConfig database connection for website monitoring
+ispconfig_db:
+  host: "localhost"
+  port: 3306
+  user: "ispconfig"
+  password: "{{ vault_ispconfig_db_password | default('') }}"
+  database: "dbispconfig"
+
+# Email alert configuration
+email_alerts:
+  enabled: true
+  smtp_host: "mail.lavnet.net"
+  smtp_port: 587
+  smtp_user: "alerts@lavnet.net"
+  smtp_password: "{{ vault_smtp_password | default('') }}"
+  from_email: "ispconfig-monitor@lavnet.net"
+  to_emails:
+    - "admin@lavnet.net"
+  subject_prefix: "[ISPConfig-CERTS]"
+
+# Alert thresholds
+alert_thresholds:
+  cert_expiry_warning_days: 30
+  cert_expiry_critical_days: 7
+
+# acme.sh configuration
+acme_sh:
+  install_path: "/root/.acme.sh"
+  config_home: "/root/.acme.sh"
+# =====================================================================================================

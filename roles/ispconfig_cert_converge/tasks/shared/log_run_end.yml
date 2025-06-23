@@ -1,0 +1,36 @@
+# =====================================================================================================
+
+---
+# Log run completion with summary
+
+- name: Calculate run duration
+  ansible.builtin.shell: |
+    START_TIME="{{ run_start_time }}"
+    END_TIME="{{ run_end_time }}"
+    START_EPOCH=$(date -d "$START_TIME" +%s)
+    END_EPOCH=$(date -d "$END_TIME" +%s)
+    DURATION=$(($END_EPOCH - $START_EPOCH))
+    echo "${DURATION}s"
+  register: run_duration
+  changed_when: false
+
+- name: Determine run status
+  ansible.builtin.set_fact:
+    run_status: "{{ 'FAILED' if run_failures | int > 0 else ('SUCCESS' if run_issues_fixed | int > 0 or run_warnings | int > 0 else 'SUCCESS') }}"
+
+- name: Log run end to syslog
+  ansible.builtin.shell: |
+    logger -t ispconfig-cert-converge -p local1.info "RUN_END run_id={{ run_id }} status={{ run_status }} issues_fixed={{ run_issues_fixed }} warnings={{ run_warnings }} failures={{ run_failures }} duration={{ run_duration.stdout }}"
+
+- name: Log run end to file
+  ansible.builtin.lineinfile:
+    path: "{{ running_log.path }}"
+    line: "[{{ ansible_date_time.iso8601 }}] RUN_END: {{ run_status }} - {{ run_issues_fixed }} issues fixed, {{ run_warnings }} warnings, {{ run_failures }} failures ({{ run_duration.stdout }})"
+
+- name: Log detailed changes if any
+  ansible.builtin.lineinfile:
+    path: "{{ running_log.path }}"
+    line: "[{{ ansible_date_time.iso8601 }}] CHANGES: {{ run_changes_made | join(', ') }}"
+  when: run_changes_made | length > 0
+
+# =====================================================================================================

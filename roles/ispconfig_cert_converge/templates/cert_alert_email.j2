@@ -1,0 +1,52 @@
+# =====================================================================================================
+
+Subject: {{ email_alerts.subject_prefix }} Certificate Issues Detected on {{ inventory_hostname }}
+
+# Certificate Alert - {{ inventory_hostname }}
+
+**Alert Time:** {{ ansible_date_time.iso8601 }}  
+**Run ID:** {{ run_id }}  
+**Alert Level:** {{ alert_level | upper }}
+
+## Issues Summary
+
+{% if cert_report.expired | length > 0 %}
+### ❌ EXPIRED CERTIFICATES ({{ cert_report.expired | length }})
+{% for cert in cert_report.expired %}
+- **{{ cert.domain }}** - Expired {{ cert.days_remaining * -1 }} days ago ({{ cert.expiry_date }})
+{% endfor %}
+{% endif %}
+
+{% if cert_report.expiring_soon | length > 0 %}
+### ⚠️ CERTIFICATES EXPIRING SOON ({{ cert_report.expiring_soon | length }})
+{% for cert in cert_report.expiring_soon %}
+- **{{ cert.domain }}** - Expires in {{ cert.days_remaining }} days ({{ cert.expiry_date }})
+{% endfor %}
+{% endif %}
+
+## Action Required
+
+{% if cert_report.expired | length > 0 %}
+**IMMEDIATE ACTION REQUIRED** for expired certificates:
+1. Renew expired certificates immediately
+2. Update website configurations
+3. Verify SSL functionality
+{% endif %}
+
+{% if cert_report.expiring_soon | length > 0 %}
+**SCHEDULED RENEWAL** for expiring certificates:
+1. Plan certificate renewal within {{ alert_thresholds.cert_expiry_warning_days }} days
+2. Coordinate with any maintenance windows
+3. Monitor renewal process
+{% endif %}
+
+## Full Report
+
+{{ cert_report_content }}
+
+---
+*This alert was generated automatically by ISPConfig Certificate Convergence*  
+*Host: {{ inventory_hostname }}*  
+*Run ID: {{ run_id }}*
+
+# =====================================================================================================

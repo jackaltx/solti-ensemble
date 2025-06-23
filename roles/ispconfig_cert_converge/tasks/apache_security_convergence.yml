@@ -1,0 +1,13 @@
+# =====================================================================================================
+
+---
+# Apache Security Configuration Convergence
+
+- name: Detect Apache security configuration issues
+  include_tasks: detect_apache_security_issues.yml
+
+- name: Fix Apache security configuration
+  include_tasks: fix_apache_security.yml
+  when: apache_security_issues_detected | default(false)
+
+# =====================================================================================================
