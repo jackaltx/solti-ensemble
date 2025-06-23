@@ -1,5 +1,3 @@
-# =====================================================================================================
-
 ---
 # Validate certificate and key pairing and expiry
 
@@ -59,5 +57,3 @@
     file_permissions.results | selectattr('stat.mode', 'ne', item.expected_mode) | list | length > 0 or
     file_permissions.results | selectattr('stat.pw_name', 'ne', item.expected_owner) | list | length > 0 or
     file_permissions.results | selectattr('stat.gr_name', 'ne', item.expected_group) | list | length > 0
-
-# =====================================================================================================

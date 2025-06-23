@@ -1,5 +1,3 @@
-# =====================================================================================================
-
 ---
 # Query ISPConfig database for SSL-enabled websites
 
@@ -29,5 +27,3 @@
   ansible.builtin.set_fact:
     ispconfig_ssl_websites: "{{ ssl_websites_query.query_result[0] if ssl_websites_query.query_result else [] }}"
   when: ssl_websites_query is defined
-
-# =====================================================================================================

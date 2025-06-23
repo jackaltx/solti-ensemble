@@ -1,5 +1,3 @@
-# =====================================================================================================
-
 ---
 # Structured logging and git backup operations
 
@@ -42,7 +40,7 @@
     group: root
     mode: preserve
   loop: "{{ files_changed }}"
-  when: 
+  when:
     - backup_repository.enabled | bool
     - files_changed | length > 0
 
@@ -53,8 +51,6 @@
     if ! git diff --cached --quiet; then
       git commit -m "{{ backup_repository.commit_msg }} - {{ log_message }}"
     fi
-  when: 
+  when:
     - backup_repository.enabled | bool
     - files_changed | length > 0
-
-# =====================================================================================================

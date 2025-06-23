@@ -1,5 +1,3 @@
-# =====================================================================================================
-
 ---
 # Fix certificate issues using acme.sh
 
@@ -10,7 +8,7 @@
   loop:
     - "{{ cert_target.cert_path }}"
     - "{{ cert_target.key_path }}"
-  when: 
+  when:
     - "'certificate_is_symlink' in cert_issues or 'key_is_symlink' in cert_issues"
 
 - name: "{{ cert_target.name }} - Check if acme.sh certificate exists"
@@ -32,7 +30,7 @@
   ansible.builtin.shell: |
     {{ acme_sh.install_path }}/acme.sh --renew -d {{ cert_target.acme_domain }} --ecc --force
   register: acme_renew_result
-  when: 
+  when:
     - not acme_cert_stat.stat.exists or acme_install_result.rc != 0
     - "'certificate_expiring_soon' in cert_issues or 'certificate_key_mismatch' in cert_issues"
 
@@ -58,7 +56,7 @@
     log_message: "CERT_FIXED target={{ cert_target.name }} domain={{ cert_target.acme_domain }} issues={{ cert_issues | join(',') }}"
     log_level: "INFO"
     component: "cert_infrastructure"
-    files_changed: 
+    files_changed:
       - "{{ cert_target.cert_path }}"
       - "{{ cert_target.key_path }}"
 
@@ -66,5 +64,3 @@
   ansible.builtin.set_fact:
     run_issues_fixed: "{{ run_issues_fixed | int + 1 }}"
     run_changes_made: "{{ run_changes_made + ['cert_fixed_' + cert_target.name] }}"
-
-# =====================================================================================================

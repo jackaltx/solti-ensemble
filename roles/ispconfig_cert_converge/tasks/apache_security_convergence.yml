@@ -1,13 +1,23 @@
-# =====================================================================================================
-
 ---
 # Apache Security Configuration Convergence
 
 - name: Detect Apache security configuration issues
   include_tasks: detect_apache_security_issues.yml
 
+# triggers only when the var "apache_security_issues_detected" is true and defined in the detect
 - name: Fix Apache security configuration
   include_tasks: fix_apache_security.yml
-  when: apache_security_issues_detected | default(false)
+  when: apache_security_issues_detected is defined and apache_security_issues_detected
 
-# =====================================================================================================
+# ........................................................................
+# Running Log
+#
+
+- name: Log Apache security fix
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "APACHE_SECURITY Completed"
+    log_level: "INFO"
+    component: "apache_security"
+    files_changed: ["{{ apache_security.conf_file }}"]
+  when: apache_security_config_result.changed

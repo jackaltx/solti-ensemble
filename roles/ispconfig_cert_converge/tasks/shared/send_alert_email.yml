@@ -1,5 +1,3 @@
-# =====================================================================================================
-
 ---
 # Reusable email alerting component
 
@@ -25,5 +23,3 @@
     else
       logger -t ispconfig-cert-converge -p local1.error "EMAIL_FAILED alert_type={{ alert_type }} error='{{ email_result.msg | default('unknown') }}'"
     fi
-
-# =====================================================================================================
