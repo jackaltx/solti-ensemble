@@ -1,0 +1,68 @@
+---
+# NOTE: var apache_security_conf_stat was set in detect.
+# Note: this is only done when required
+
+# ........................................................................
+
+- name: Backup existing security.conf
+  ansible.builtin.copy:
+    src: "{{ apache_security.conf_file }}"
+    dest: "{{ apache_security.conf_file }}.backup.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_security_conf_stat.stat.exists
+
+# ........................................................................
+# Make changes
+
+- name: Fix ServerTokens setting
+  ansible.builtin.lineinfile:
+    path: "{{ apache_security.conf_file }}"
+    regexp: '^#?ServerTokens\s+'
+    line: "ServerTokens {{ apache_security.required_settings.ServerTokens }}"
+    backup: yes
+  register: server_tokens_result
+  when: apache_parsed_directives.get('ServerTokens', '') != apache_security.required_settings.ServerTokens
+
+- name: Log ServerTokens fix
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "APACHE_SECURITY ServerTokens={{ apache_security.required_settings.ServerTokens }} file={{ apache_security.conf_file }}"
+    log_level: "INFO"
+    component: "apache_security"
+    files_changed: ["{{ apache_security.conf_file }}"]
+  when: server_tokens_result is defined and server_tokens_result.changed
+
+- name: Fix ServerSignature setting
+  ansible.builtin.lineinfile:
+    path: "{{ apache_security.conf_file }}"
+    regexp: '^#?ServerSignature\s+'
+    line: "ServerSignature {{ apache_security.required_settings.ServerSignature }}"
+    backup: yes
+  register: server_signature_result
+  when: apache_parsed_directives.get('ServerSignature', '') != apache_security.required_settings.ServerSignature
+
+- name: Log ServerSignature fix
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "APACHE_SECURITY ServerSignature={{ apache_security.required_settings.ServerSignature }} file={{ apache_security.conf_file }}"
+    log_level: "INFO"
+    component: "apache_security"
+    files_changed: ["{{ apache_security.conf_file }}"]
+  when: server_signature_result is defined and server_signature_result.changed
+
+# ........................................................................
+# Finalize
+
+- name: Determine if any changes require service restart
+  ansible.builtin.set_fact:
+    apache_security_config_result:
+      changed: "{{ (server_tokens_result.changed | default(false)) or (server_signature_result.changed | default(false)) }}"
+
+- name: Reload Apache configuration
+  ansible.builtin.systemd:
+    name: apache2
+    state: reloaded
+  when: apache_security_config_result.changed

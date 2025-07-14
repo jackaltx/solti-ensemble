@@ -1,0 +1,59 @@
+---
+# Validate certificate and key pairing and expiry
+
+- name: "{{ cert_target.name }} - Check certificate expiry"
+  ansible.builtin.shell: |
+    openssl x509 -in "{{ cert_target.cert_path }}" -noout -checkend {{ (alert_thresholds.cert_expiry_warning_days * 24 * 3600) }}
+  register: cert_expiry_check
+  failed_when: false
+  changed_when: false
+
+- name: "{{ cert_target.name }} - Get certificate expiry date"
+  ansible.builtin.shell: |
+    openssl x509 -in "{{ cert_target.cert_path }}" -noout -enddate | cut -d= -f2
+  register: cert_expiry_date
+  changed_when: false
+
+- name: "{{ cert_target.name }} - Check certificate-key pairing"
+  ansible.builtin.shell: |
+    CERT_HASH=$(openssl x509 -in "{{ cert_target.cert_path }}" -noout -modulus | openssl md5)
+    KEY_HASH=$(openssl rsa -in "{{ cert_target.key_path }}" -noout -modulus | openssl md5)
+    [ "$CERT_HASH" = "$KEY_HASH" ]
+  register: cert_key_pairing_check
+  failed_when: false
+  changed_when: false
+
+- name: "{{ cert_target.name }} - Check file permissions"
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: file_permissions
+  loop:
+    - path: "{{ cert_target.cert_path }}"
+      expected_mode: "{{ cert_target.cert_mode }}"
+      expected_owner: "{{ cert_target.owner }}"
+      expected_group: "{{ cert_target.group }}"
+    - path: "{{ cert_target.key_path }}"
+      expected_mode: "{{ cert_target.key_mode }}"
+      expected_owner: "{{ cert_target.owner }}"
+      expected_group: "{{ cert_target.group }}"
+
+- name: "{{ cert_target.name }} - Detect certificate expiry issues"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['certificate_expiring_soon'] }}"
+  when: cert_expiry_check.rc != 0
+
+- name: "{{ cert_target.name }} - Detect certificate-key mismatch"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['certificate_key_mismatch'] }}"
+  when: cert_key_pairing_check.rc != 0
+
+- name: "{{ cert_target.name }} - Detect permission issues"
+  ansible.builtin.set_fact:
+    cert_issues_detected: true
+    cert_issues: "{{ cert_issues + ['incorrect_permissions'] }}"
+  when: >
+    file_permissions.results | selectattr('stat.mode', 'ne', item.expected_mode) | list | length > 0 or
+    file_permissions.results | selectattr('stat.pw_name', 'ne', item.expected_owner) | list | length > 0 or
+    file_permissions.results | selectattr('stat.gr_name', 'ne', item.expected_group) | list | length > 0

@@ -1,0 +1,21 @@
+---
+# Generate comprehensive certificate status report
+
+- name: Categorize certificate statuses
+  ansible.builtin.set_fact:
+    cert_report:
+      valid: "{{ website_cert_statuses | default([]) | selectattr('status', 'equalto', 'valid') | list }}"
+      expiring_soon: "{{ website_cert_statuses | default([]) | selectattr('status', 'equalto', 'expiring_soon') | list }}"
+      expired: "{{ website_cert_statuses | default([]) | selectattr('status', 'equalto', 'expired') | list }}"
+      total_websites: "{{ (website_cert_statuses | default([])) | length }}"
+
+- name: Generate certificate report content
+  ansible.builtin.template:
+    src: cert_status_report.j2
+    dest: "{{ backup_repository.path }}/cert_status_report.md"
+  register: cert_report_file
+
+- name: Set certificate report content
+  ansible.builtin.set_fact:
+    cert_report_content: "{{ lookup('file', backup_repository.path + '/cert_status_report.md') }}"
+  when: cert_report_file.changed

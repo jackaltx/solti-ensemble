@@ -1,0 +1,18 @@
+- name: Generate unique run ID
+  ansible.builtin.set_fact:
+    run_id: "{{ ansible_date_time.date | replace('-', '') }}-{{ ansible_date_time.time | replace(':', '') }}"
+
+- name: Log run start to syslog
+  ansible.builtin.shell: |
+    logger -t ispconfig-cert-converge -p local1.info "RUN_START run_id={{ run_id }} version=1.0 host={{ inventory_hostname }} components={{ [enable_apache_security, enable_cert_infrastructure, enable_website_monitoring] | select | list | join(',') }}"
+
+- name: Log run start to file
+  ansible.builtin.lineinfile:
+    path: "{{ running_log.path }}"
+    line: "[{{ ansible_date_time.iso8601 }}] RUN_START: ispconfig_cert_converge v1.0 - Host: {{ inventory_hostname }} - Run ID: {{ run_id }}"
+    create: yes
+    owner: root
+    group: root
+    mode: '0644'
+
+# =====================================================================================================

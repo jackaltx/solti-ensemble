@@ -1,0 +1,36 @@
+# =====================================================================================================
+
+---
+# handlers file for ispconfig_cert_converge
+
+- name: restart apache2
+  ansible.builtin.systemd:
+    name: apache2
+    state: restarted
+
+- name: reload apache2
+  ansible.builtin.systemd:
+    name: apache2
+    state: reloaded
+
+- name: restart postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: restarted
+
+- name: reload postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: reloaded
+
+- name: restart dovecot
+  ansible.builtin.systemd:
+    name: dovecot
+    state: restarted
+
+- name: reload dovecot
+  ansible.builtin.systemd:
+    name: dovecot
+    state: reloaded
+
+# =====================================================================================================

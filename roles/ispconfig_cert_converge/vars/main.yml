@@ -1,0 +1,274 @@
+# =====================================================================================================
+
+---
+# vars file for ispconfig_cert_converge
+
+# Internal variables - do not override
+_role_version: "1.0.0"
+_role_name: "ispconfig_cert_converge"
+
+# SQL query for ISPConfig SSL websites
+_website_ssl_query: |
+  SELECT 
+    domain, 
+    subdomain,
+    ssl,
+    ssl_domain,
+    document_root,
+    active
+  FROM web_domain 
+  WHERE ssl = 'y' 
+    AND active = 'y'
+    AND type = 'vhost'
+  ORDER BY domain
+
+# Certificate validation timeouts
+_cert_validation_timeout: 10
+_cert_check_retries: 3
+
+# File patterns for backup exclusions
+_backup_exclude_patterns:
+  - "*.log"
+  - "*.tmp"
+  - "*~"
+  - "*.backup.*"
+
+# =====================================================================================================
+# README.md
+# =====================================================================================================
+
+# ISPConfig Certificate Convergence Role
+
+Comprehensive certificate management and monitoring for ISPConfig environments with automated remediation, reporting, and alerting.
+
+## Overview
+
+This role provides three integrated components:
+
+1. **Apache Security Convergence** - Ensures proper Apache security configuration
+2. **Certificate Infrastructure Convergence** - Manages critical mail and ISPConfig interface certificates
+3. **Website Certificate Monitoring** - Monitors all ISPConfig websites for certificate health
+
+## Features
+
+- **Idempotent Operations** - Only makes changes when necessary
+- **acme.sh Integration** - Uses acme.sh for all certificate operations
+- **Structured Logging** - Compatible with syslog/journald, fail2ban, and LOKI
+- **Email Alerting** - Configurable email notifications for certificate issues
+- **Git Integration** - Version control for configuration changes
+- **Database Integration** - Queries ISPConfig database for comprehensive monitoring
+
+## Quick Start
+
+### Basic Usage
+
+```yaml
+- hosts: ispconfig_servers
+  roles:
+    - role: ispconfig_cert_converge
+      vars:
+        vault_ispconfig_db_password: "{{ vault.ispconfig_password }}"
+        vault_smtp_password: "{{ vault.smtp_password }}"
+```
+
+### Component-Specific Usage
+
+```yaml
+- hosts: ispconfig_servers
+  roles:
+    - role: ispconfig_cert_converge
+      vars:
+        enable_apache_security: true
+        enable_cert_infrastructure: true
+        enable_website_monitoring: false  # Disable website monitoring
+```
+
+## Configuration
+
+### Required Variables
+
+```yaml
+# Stored in vault
+vault_ispconfig_db_password: "your_ispconfig_db_password"
+vault_smtp_password: "your_smtp_password"
+```
+
+### Optional Variables
+
+```yaml
+# Component Control
+enable_apache_security: true
+enable_cert_infrastructure: true  
+enable_website_monitoring: true
+
+# Email Configuration
+email_alerts:
+  enabled: true
+  to_emails: 
+    - "admin@example.com"
+    - "ops@example.com"
+
+# Certificate Targets (customize for your environment)
+cert_infrastructure_targets:
+  - name: "postfix_smtp"
+    acme_domain: "mail.yourdomain.com"
+    # ... other settings
+```
+
+## Components
+
+### 1. Apache Security Convergence
+
+Ensures Apache security settings are properly configured:
+- `ServerTokens Prod`
+- `ServerSignature Off`
+
+### 2. Certificate Infrastructure Convergence
+
+Manages critical service certificates:
+- **Postfix SMTP** certificates (`/etc/postfix/smtpd.cert`, `/etc/postfix/smtpd.key`)
+- **ISPConfig Interface** certificates (`/usr/local/ispconfig/interface/ssl/`)
+
+Automatically detects and fixes:
+- Symlinks created by ISPConfig (replaces with proper certificates)
+- Expired or expiring certificates
+- Certificate-key mismatches
+- Incorrect file permissions
+
+### 3. Website Certificate Monitoring
+
+Monitors all ISPConfig-managed websites:
+- Queries ISPConfig database for SSL-enabled sites
+- Checks certificate expiry dates
+- Validates certificate chains
+- Generates comprehensive reports
+- Sends email alerts for issues
+
+## Logging
+
+### Structured Logging Format
+
+Compatible with syslog/journald, fail2ban, and LOKI:
+
+```
+Jun 22 14:30:15 hostname ispconfig-cert-converge[12345]: INFO RUN_START run_id=20250622-143015 version=1.0
+Jun 22 14:30:45 hostname ispconfig-cert-converge[12345]: INFO CERT_FIXED target=postfix_smtp domain=mail.example.com issues=symlink_detected
+Jun 22 14:31:20 hostname ispconfig-cert-converge[12345]: INFO RUN_END run_id=20250622-143015 status=SUCCESS issues_fixed=1 warnings=0 duration=45s
+```
+
+### Log Locations
+
+- **File Log**: `/var/log/ispconfig-cert-converge.log`
+- **Syslog**: facility `local1`, identifier `ispconfig-cert-converge`
+- **Git Repository**: `/opt/solti-repo/apache_converge`
+
+## Email Alerts
+
+Automatically sends email alerts for:
+- Expired certificates
+- Certificates expiring within threshold (default: 30 days)
+- Certificate validation failures
+- Critical infrastructure certificate issues
+
+### Alert Levels
+
+- **Critical**: Expired certificates, infrastructure failures
+- **Warning**: Certificates expiring soon
+- **Info**: Successful remediations
+
+## Integration
+
+### With acme.sh
+
+Uses acme.sh native commands:
+- `--install-cert` for proper certificate installation
+- `--renew --force` for certificate renewal
+- Automatic service reloading via `--reloadcmd`
+
+### With ISPConfig Database
+
+Queries ISPConfig database to discover all SSL-enabled websites:
+- Read-only database access
+- Automatic discovery of new sites
+- Comprehensive monitoring coverage
+
+### With Git
+
+Version control for all configuration changes:
+- Automatic commits with descriptive messages
+- Complete audit trail
+- Integration with existing backup workflows
+
+## Requirements
+
+### System Requirements
+
+- **ISPConfig 3.x** environment
+- **acme.sh** installed and configured
+- **MySQL/MariaDB** access to ISPConfig database
+- **Systemd** for service management
+
+### Ansible Requirements
+
+- **Ansible 2.9+**
+- **community.mysql** collection
+- **community.general** collection
+
+### Permissions
+
+- **Root access** on target systems
+- **Database access** to ISPConfig database (read-only sufficient)
+- **SMTP access** for email alerts
+
+## Security Considerations
+
+- Uses read-only database access where possible
+- Stores sensitive credentials in Ansible Vault
+- Maintains proper file permissions on certificates
+- Logs operations without exposing sensitive data
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failures**
+   - Verify ISPConfig database credentials
+   - Check network connectivity to database host
+
+2. **acme.sh Command Failures**
+   - Ensure acme.sh is properly installed
+   - Verify certificate domains are correctly configured
+
+3. **Email Delivery Issues**
+   - Check SMTP server configuration
+   - Verify email credentials and network access
+
+### Debug Mode
+
+Enable verbose logging:
+
+```yaml
+running_log:
+  log_level: "verbose"
+```
+
+Check specific components:
+
+```bash
+# View structured logs
+journalctl -t ispconfig-cert-converge
+
+# Check file logs
+tail -f /var/log/ispconfig-cert-converge.log
+
+# Review git history
+cd /opt/solti-repo/apache_converge && git log --oneline
+```
+
+## License
+
+BSD-3-Clause
+
+## Author Information
+
+Created by the Solti Ensemble team for comprehensive ISPConfig certificate management.

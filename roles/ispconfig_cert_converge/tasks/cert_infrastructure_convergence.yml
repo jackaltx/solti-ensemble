@@ -1,0 +1,9 @@
+---
+# Certificate Infrastructure Convergence
+
+- name: Process certificate infrastructure targets
+  include_tasks: process_cert_target.yml
+  loop: "{{ cert_infrastructure_targets }}"
+  loop_control:
+    loop_var: cert_target
+    label: "{{ cert_target.name }}"

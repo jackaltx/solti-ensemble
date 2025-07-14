@@ -1,0 +1,70 @@
+---
+# Detect Apache security configuration issues with parser
+
+# !!!!!!!!!!!!!!!!!!
+# If it does not exist...this is a problem....alert and stop run
+
+- name: Check if Apache security.conf exists
+  ansible.builtin.stat:
+    path: "{{ apache_security.conf_file }}"
+  register: apache_security_conf_stat
+
+# ========================================================================
+# Read apache2 security.conf
+# Note:  apache cannot config vars, bummer we have to parse.
+#
+- name: Process Apache2 Security configuration
+  when: apache_security_conf_stat.stat.exists
+  block:
+    - name: Initialize security issues detection
+      ansible.builtin.set_fact:
+        apache_security_issues_detected: false
+        apache_security_issues: []
+        apache_parsed_directives: {}
+
+    - name: Read current Apache security configuration
+      ansible.builtin.slurp:
+        src: "{{ apache_security.conf_file }}"
+      register: current_security_conf
+
+    - name: Parse all active Apache directives (non-commented)
+      ansible.builtin.set_fact:
+        apache_parsed_directives: "{{ apache_parsed_directives | combine({item.split()[0]: item.split()[1]}) }}"
+      loop: "{{ (current_security_conf.content | b64decode).split('\n') | select('match', '^[^#]*\\S+\\s+\\S+') | list }}"
+      when: item.split() | length >= 2
+      loop_control:
+        label: "{{ item.split()[0] if item.split() | length >= 1 else 'invalid' }}"
+
+    # ========================================================================
+    # Test config outputs
+    #
+    - name: Check ServerTokens setting
+      ansible.builtin.set_fact:
+        apache_security_issues_detected: true
+        apache_security_issues: "{{ apache_security_issues + ['ServerTokens not set to ' + apache_security.required_settings.ServerTokens + ' (currently: ' + apache_parsed_directives.get('ServerTokens', 'not set') + ')'] }}"
+      when: apache_parsed_directives.get('ServerTokens', '') != apache_security.required_settings.ServerTokens
+
+    - name: Debug ServerTokens parsed directives
+      ansible.builtin.debug:
+        var: apache_parsed_directives
+        verbosity: 1
+
+    - name: Check ServerSignature setting
+      ansible.builtin.set_fact:
+        apache_security_issues_detected: true
+        apache_security_issues: "{{ apache_security_issues + ['ServerSignature not set to ' + apache_security.required_settings.ServerSignature + ' (currently: ' + apache_parsed_directives.get('ServerSignature', 'not set') + ')'] }}"
+      when: apache_parsed_directives.get('ServerSignature', '') != apache_security.required_settings.ServerSignature
+
+    - name: Debug ServerSignature parsed directives
+      ansible.builtin.debug:
+        var: apache_parsed_directives
+        verbosity: 1
+
+# ========================================================================
+# Finalize
+#
+
+- name: CRITICAL - Apache security.conf missing - stopping run
+  ansible.builtin.fail:
+    msg: "Apache security.conf not found at {{ apache_security.conf_file }} - this is a critical security issue"
+  when: not apache_security_conf_stat.stat.exists

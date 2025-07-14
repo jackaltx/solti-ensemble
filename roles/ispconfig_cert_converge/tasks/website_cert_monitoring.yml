@@ -1,0 +1,27 @@
+---
+# Website Certificate Monitoring and Reporting
+
+- name: Query ISPConfig websites with SSL
+  include_tasks: query_ispconfig_websites.yml
+
+- name: Validate website certificates
+  include_tasks: validate_website_cert.yml
+  loop: "{{ ispconfig_ssl_websites }}"
+  loop_control:
+    loop_var: website
+    label: "{{ website.domain }}"
+  when: ispconfig_ssl_websites is defined
+
+- name: Generate certificate status report
+  include_tasks: generate_cert_report.yml
+
+- name: Send alerts if issues detected
+  include_tasks: shared/send_alert_email.yml
+  vars:
+    alert_type: "website_certificate_issues"
+    alert_level: "{{ 'critical' if (cert_report.expired | default([])) | length > 0 else 'warning' }}"
+    alert_subject: "Website Certificate Issues Detected"
+    alert_body: "{{ cert_report_content }}"
+  when:
+    - email_alerts.enabled | bool
+    - (cert_report.expiring_soon | default([])) | length > 0 or (cert_report.expired | default([])) | length > 0

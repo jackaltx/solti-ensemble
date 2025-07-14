@@ -1,0 +1,66 @@
+---
+# Fix certificate issues using acme.sh
+
+- name: "{{ cert_target.name }} - Remove symlinks if present"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ cert_target.cert_path }}"
+    - "{{ cert_target.key_path }}"
+  when:
+    - "'certificate_is_symlink' in cert_issues or 'key_is_symlink' in cert_issues"
+
+- name: "{{ cert_target.name }} - Check if acme.sh certificate exists"
+  ansible.builtin.stat:
+    path: "{{ acme_sh.config_home }}/{{ cert_target.acme_domain }}_ecc/{{ cert_target.acme_domain }}.cer"
+  register: acme_cert_stat
+
+- name: "{{ cert_target.name }} - Install certificate using acme.sh"
+  ansible.builtin.shell: |
+    {{ acme_sh.install_path }}/acme.sh --install-cert -d {{ cert_target.acme_domain }} --ecc \
+      --cert-file {{ cert_target.cert_path }} \
+      --key-file {{ cert_target.key_path }} \
+      --fullchain-file {{ cert_target.cert_path }} \
+      --reloadcmd "systemctl reload {{ cert_target.reload_services | join(' ') }}"
+  register: acme_install_result
+  when: acme_cert_stat.stat.exists
+
+- name: "{{ cert_target.name }} - Force renew if certificate issues persist"
+  ansible.builtin.shell: |
+    {{ acme_sh.install_path }}/acme.sh --renew -d {{ cert_target.acme_domain }} --ecc --force
+  register: acme_renew_result
+  when:
+    - not acme_cert_stat.stat.exists or acme_install_result.rc != 0
+    - "'certificate_expiring_soon' in cert_issues or 'certificate_key_mismatch' in cert_issues"
+
+- name: "{{ cert_target.name }} - Set correct file permissions"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ cert_target.cert_path }}"
+      owner: "{{ cert_target.owner }}"
+      group: "{{ cert_target.group }}"
+      mode: "{{ cert_target.cert_mode }}"
+    - path: "{{ cert_target.key_path }}"
+      owner: "{{ cert_target.owner }}"
+      group: "{{ cert_target.group }}"
+      mode: "{{ cert_target.key_mode }}"
+
+- name: "{{ cert_target.name }} - Log certificate fix"
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "CERT_FIXED target={{ cert_target.name }} domain={{ cert_target.acme_domain }} issues={{ cert_issues | join(',') }}"
+    log_level: "INFO"
+    component: "cert_infrastructure"
+    files_changed:
+      - "{{ cert_target.cert_path }}"
+      - "{{ cert_target.key_path }}"
+
+- name: "{{ cert_target.name }} - Update run tracking"
+  ansible.builtin.set_fact:
+    run_issues_fixed: "{{ run_issues_fixed | int + 1 }}"
+    run_changes_made: "{{ run_changes_made + ['cert_fixed_' + cert_target.name] }}"

@@ -1,0 +1,51 @@
+---
+# Validate individual website certificate
+
+- name: "{{ website.domain }} - Get certificate information"
+  ansible.builtin.shell: |
+    timeout 10 openssl s_client -connect {{ website.domain }}:443 -servername {{ website.domain }} -showcerts </dev/null 2>/dev/null | \
+    openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2
+  register: website_cert_expiry
+  failed_when: false
+  changed_when: false
+
+- name: "{{ website.domain }} - Calculate days until expiry"
+  ansible.builtin.shell: |
+    if [ -n "{{ website_cert_expiry.stdout }}" ]; then
+      EXPIRY_DATE="{{ website_cert_expiry.stdout }}"
+      EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s)
+      CURRENT_EPOCH=$(date +%s)
+      DAYS_REMAINING=$(( ($EXPIRY_EPOCH - $CURRENT_EPOCH) / 86400 ))
+      echo $DAYS_REMAINING
+    else
+      echo "-1"
+    fi
+  register: website_cert_days_remaining
+  changed_when: false
+  when: website_cert_expiry.rc == 0
+
+- name: "{{ website.domain }} - Set certificate status"
+  ansible.builtin.set_fact:
+    website_cert_status:
+      domain: "{{ website.domain }}"
+      status: "{{ 'expired' if (website_cert_days_remaining.stdout | int) < 0 else ('expiring_soon' if (website_cert_days_remaining.stdout | int) < alert_thresholds.cert_expiry_warning_days else 'valid') }}"
+      days_remaining: "{{ website_cert_days_remaining.stdout | int if website_cert_days_remaining.stdout is defined else -1 }}"
+      expiry_date: "{{ website_cert_expiry.stdout if website_cert_expiry.rc == 0 else 'unknown' }}"
+
+- name: "{{ website.domain }} - Add to certificate status list"
+  ansible.builtin.set_fact:
+    website_cert_statuses: "{{ website_cert_statuses | default([]) + [website_cert_status] }}"
+
+- name: "{{ website.domain }} - Log certificate warnings"
+  include_tasks: shared/log_and_backup.yml
+  vars:
+    log_message: "CERT_EXPIRY_WARNING domain={{ website.domain }} days_remaining={{ website_cert_status.days_remaining }} status={{ website_cert_status.status }}"
+    log_level: "WARN"
+    component: "website_monitoring"
+    files_changed: []
+  when: website_cert_status.status in ['expiring_soon', 'expired']
+
+- name: "{{ website.domain }} - Update run tracking for warnings"
+  ansible.builtin.set_fact:
+    run_warnings: "{{ run_warnings | int + 1 }}"
+  when: website_cert_status.status in ['expiring_soon', 'expired']
