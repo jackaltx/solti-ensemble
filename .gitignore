@@ -1,0 +1,12 @@
+# No generated artifacts?
+
+# Standard ignores
+*.pyc
+__pycache__/
+.ansible/
+*.retry
+.DS_Store
+*.swp
+*.log
+.venv/
+venv/
