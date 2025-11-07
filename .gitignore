@@ -1,12 +1,45 @@
-# No generated artifacts?
-
-# Standard ignores
-*.pyc
+# Python bytecode
 __pycache__/
-.ansible/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Ansible artifacts
 *.retry
-.DS_Store
+verify_output/
+logs/*.log
+
+# Temporary files
+tmp/
+*.tmp
 *.swp
-*.log
-.venv/
-venv/
+*.swo
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets and credentials
+.vault_pass
+*.pem
+*.key
+!roles/*/files/*.key
+*.crt
+!roles/*/files/*.crt
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Local development
+.env
+.envrc
+local_*
