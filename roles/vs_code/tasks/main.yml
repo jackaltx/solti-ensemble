@@ -1,6 +1,9 @@
 ---
 # tasks file for vs-code
 
+# SMELL: review this...make it for deb/rh3el
+# very low priority
+
 - name: Import the vs-code key
   ansible.builtin.rpm_key:
     state: present
