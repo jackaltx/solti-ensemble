@@ -4,20 +4,20 @@
 
 This collection uses a two-branch workflow:
 
-- **dev**: Development/integration branch
+- **test**: Development/integration branch
 - **main**: Production-ready branch
 
 ## Development Workflow
 
 ```
-feature branch → dev → main (via PR)
+feature branch → test → main (via PR)
 ```
 
 ### Working on Features
 
-1. **Create feature branch from dev**:
+1. **Create feature branch from test**:
    ```bash
-   git checkout dev
+   git checkout test
    git pull
    git checkout -b feature/my-feature
    ```
@@ -29,26 +29,26 @@ feature branch → dev → main (via PR)
    # Run tests, iterate
    ```
 
-3. **Push to dev branch**:
+3. **Push to test branch**:
    ```bash
-   git checkout dev
+   git checkout test
    git merge feature/my-feature
-   git push origin dev
+   git push origin test
    ```
 
-4. **Monitor dev branch workflows**:
+4. **Monitor test branch workflows**:
    - lint.yml: Fast feedback (~5 min)
    - superlinter.yml: Comprehensive validation (~10 min)
 
-5. **When ready, create PR dev → main**:
+5. **When ready, create PR test → main**:
    - GitHub UI: Create Pull Request
    - Triggers ci.yml: Full 3-platform testing (~60 min)
    - Review artifacts before merging
 
 ## Workflow Triggers
 
-| Workflow | dev branch | main branch | What it does |
-|----------|------------|-------------|--------------|
+| Workflow | test branch | main branch | What it does |
+|----------|-------------|-------------|--------------|
 | **lint.yml** | ✅ push/PR | ✅ push/PR | YAML, Markdown, Ansible lint + syntax |
 | **superlinter.yml** | ✅ push/PR | ❌ | Comprehensive validation (Super-Linter) |
 | **ci.yml** | ❌ | ✅ PR only | Full molecule tests (3 platforms) |
@@ -131,13 +131,13 @@ Check the failing job in GitHub Actions, fix locally, push again.
 5. Create checkpoint commit and push
 
 ### Superlinter too strict
-Superlinter runs only on dev branch - use it for early feedback.
+Superlinter runs only on test branch - use it for early feedback.
 If a check is problematic, disable it in [superlinter.yml](workflows/superlinter.yml).
 
 ## Branch Protection (Recommended)
 
 Configure on GitHub:
-- **dev branch**: No restrictions (direct push allowed)
+- **test branch**: No restrictions (direct push allowed)
 - **main branch**:
   - Require pull request reviews
   - Require status checks: lint.yml jobs
@@ -161,12 +161,12 @@ Your existing verify.yml tasks are preserved and called by molecule verify phase
 
 ## Next Steps
 
-1. **Push dev branch to GitHub**:
+1. **Push test branch to GitHub**:
    ```bash
-   git push -u origin dev
+   git push -u origin test
    ```
 
-2. **Test superlinter** on dev branch:
+2. **Test superlinter** on test branch:
    - Monitor for any lint failures
    - Fix issues before advancing to main
 
@@ -174,6 +174,6 @@ Your existing verify.yml tasks are preserved and called by molecule verify phase
    - Customize for shared service testing needs
    - Add MariaDB, HashiVault, ACME verification tasks
 
-4. **Create first PR dev → main**:
+4. **Create first PR test → main**:
    - Triggers full CI pipeline
    - Validates the workflow end-to-end

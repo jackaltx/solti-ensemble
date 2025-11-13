@@ -47,9 +47,9 @@ ansible-galaxy collection install jackaltx-solti_ensemble-*.tar.gz
 This collection uses a **checkpoint commit workflow** for iterative development:
 
 ### Branch Strategy
-- **dev**: Development/integration branch
+- **test**: Development/integration branch
 - **main**: Production-ready branch
-- Feature branches → dev → main (via PR)
+- Feature branches → test → main (via PR)
 
 ### Checkpoint Commit Pattern
 
@@ -95,7 +95,7 @@ git rebase -i HEAD~5
 See [.github/WORKFLOW_GUIDE.md](.github/WORKFLOW_GUIDE.md) for complete workflow documentation.
 
 **Quick reference:**
-- Push to **dev** branch: Triggers lint + superlinter
+- Push to **test** branch: Triggers lint + superlinter
 - Create PR to **main**: Triggers full CI with molecule tests across 3 platforms
 - All workflows use checkpoint-friendly approach
 
