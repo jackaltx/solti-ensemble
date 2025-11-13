@@ -42,6 +42,63 @@ ansible-galaxy collection build
 ansible-galaxy collection install jackaltx-solti_ensemble-*.tar.gz
 ```
 
+## Git Workflow
+
+This collection uses a **checkpoint commit workflow** for iterative development:
+
+### Branch Strategy
+- **dev**: Development/integration branch
+- **main**: Production-ready branch
+- Feature branches → dev → main (via PR)
+
+### Checkpoint Commit Pattern
+
+**During Development:**
+```bash
+# Make changes to code
+# Create checkpoint commit
+git add -A
+git commit -m "checkpoint: add mariadb ssl support"
+
+# Run molecule test
+molecule test -s github
+
+# If test fails, make fixes and create another checkpoint
+git add -A
+git commit -m "checkpoint: fix ssl certificate path"
+molecule test -s github
+
+# Repeat until working
+```
+
+**Before PR (Squash Checkpoints):**
+```bash
+# Count your checkpoint commits
+git log --oneline | head -10
+
+# Squash last N commits (where N is number of checkpoints)
+git rebase -i HEAD~5
+
+# Mark all checkpoint commits as 'squash' or 'fixup'
+# Save and create meaningful final commit message
+```
+
+### Why Checkpoint Commits?
+
+1. **Audit trail during development** - See exactly what changed between test runs
+2. **Easy rollback** - Can git reset to any checkpoint if needed
+3. **Clean history for PR** - Squash before merging to main
+4. **Works with CI** - Each push to test triggers validation
+
+### GitHub Actions
+
+See [.github/WORKFLOW_GUIDE.md](.github/WORKFLOW_GUIDE.md) for complete workflow documentation.
+
+**Quick reference:**
+- Push to **dev** branch: Triggers lint + superlinter
+- Create PR to **main**: Triggers full CI with molecule tests across 3 platforms
+- All workflows use checkpoint-friendly approach
+
 ## Architecture and Code Structure
 
 ### Role Organization Patterns
