@@ -2,9 +2,9 @@ name: Lint and Syntax Check
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, test ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, test ]
 
 jobs:
   yaml-lint:

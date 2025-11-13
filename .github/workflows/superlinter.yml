@@ -4,10 +4,10 @@ name: Super-Linter
 on:
   push:
     branches:
-      - dev
+      - test
   pull_request:
     branches:
-      - dev
+      - test
   workflow_dispatch:
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
       - name: Run Super-Linter
         uses: github/super-linter@v4
         env:
-          DEFAULT_BRANCH: dev
+          DEFAULT_BRANCH: test
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
           # Enable specific linters
