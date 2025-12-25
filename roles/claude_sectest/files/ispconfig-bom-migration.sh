@@ -213,7 +213,7 @@ class ISPConfigMigrationSummary:
             summary_queries = {
                 'web_domains_total': "SELECT COUNT(*) as count FROM web_domain",
                 'web_domains_active': "SELECT COUNT(*) as count FROM web_domain WHERE active='y'",
-                'web_domains_ssl': "SELECT COUNT(*) as count FROM web_domain WHERE ssl='y'",
+                'web_domains_ssl': "SELECT COUNT(*) as count FROM web_domain WHERE `ssl`='y'",
                 'web_domains_custom_directives': """
                     SELECT COUNT(*) as count FROM web_domain 
                     WHERE (apache_directives IS NOT NULL AND apache_directives != '') 
@@ -248,17 +248,17 @@ class ISPConfigMigrationSummary:
             
             # Special checks for migration validation
             custom_domains = self.execute_query("""
-                SELECT domain, 
+                SELECT domain,
                        CASE WHEN apache_directives IS NOT NULL AND apache_directives != '' THEN 'apache' ELSE '' END as has_apache,
                        CASE WHEN nginx_directives IS NOT NULL AND nginx_directives != '' THEN 'nginx' ELSE '' END as has_nginx,
                        CASE WHEN custom_php_ini IS NOT NULL AND custom_php_ini != '' THEN 'php' ELSE '' END as has_php,
-                       CASE WHEN ssl='y' THEN 'ssl' ELSE '' END as has_ssl
-                FROM web_domain 
+                       CASE WHEN `ssl`='y' THEN 'ssl' ELSE '' END as has_ssl
+                FROM web_domain
                 WHERE active='y' AND (
                     (apache_directives IS NOT NULL AND apache_directives != '') OR
                     (nginx_directives IS NOT NULL AND nginx_directives != '') OR
                     (custom_php_ini IS NOT NULL AND custom_php_ini != '') OR
-                    ssl='y'
+                    `ssl`='y'
                 )
                 ORDER BY domain
             """)
