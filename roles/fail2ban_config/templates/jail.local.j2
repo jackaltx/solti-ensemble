@@ -27,3 +27,10 @@ bantime.maxtime      = {{ fail2ban_jail_defaults.bantime_maxtime }}
 bantime.factor       = {{ fail2ban_jail_defaults.bantime_factor }}
 bantime.overalljails = {{ fail2ban_jail_defaults.bantime_overalljails }}
 
+# Backend for log monitoring
+# Options: auto, systemd, polling, pyinotify, gamin
+# systemd: Use systemd journald (recommended on systemd systems)
+# auto: Automatically detect best backend (may choose polling over systemd)
+# polling: Poll log files directly (legacy method)
+backend = {{ fail2ban_jail_defaults.backend }}
+

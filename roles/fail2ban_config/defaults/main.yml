@@ -53,6 +53,8 @@ fail2ban_jail_defaults:
   bantime_maxtime: 30d
   bantime_factor: 2
   bantime_overalljails: true
+  # Backend for log monitoring (systemd = journald, auto = auto-detect, polling = file-based)
+  backend: systemd
 
 # All jails are in the jail.d directory and managed by profile
 

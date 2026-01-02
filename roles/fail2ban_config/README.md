@@ -105,3 +105,84 @@ Examples of other tools that could benefit from this approach:
 - Logrotate
 - UFW Firewall rules
 - ModSecurity rules
+
+## Role Variables
+
+### Backend Configuration (Journald Integration)
+
+**Important**: As of 2026-01-01, this role defaults to using systemd journald for log monitoring instead of file-based polling.
+
+```yaml
+fail2ban_jail_defaults:
+  backend: systemd  # Options: systemd, auto, polling, pyinotify, gamin
+```
+
+**Backend options:**
+
+- **`systemd`** (default, recommended): Use systemd journald for log monitoring
+  - Best for systemd-based systems
+  - Better integration with modern logging infrastructure
+  - Logs automatically available to Grafana Alloy/Loki without file parsing
+  - No log rotation issues
+
+- **`auto`**: Automatically detect best backend
+  - May choose polling over systemd on some systems
+  - Less predictable behavior
+
+- **`polling`**: Poll log files directly (legacy method)
+  - Use only when systemd backend is not available
+  - Requires fail2ban to monitor log files directly
+  - Subject to log rotation issues
+
+**Journald integration benefits:**
+
+When using `backend: systemd`, fail2ban logs are automatically sent to systemd journald with structured labels:
+
+```yaml
+{
+  service_type: "fail2ban"
+  hostname: "hostname"
+  unit: "fail2ban.service"
+  transport: "journal"
+}
+```
+
+This enables:
+
+- Centralized log collection via Grafana Alloy
+- Structured querying in Loki/Grafana
+- Consistent labeling across services
+- Better observability integration
+
+**Note**: Jail and action information appears in log messages (not labels), requiring LogQL parsing:
+
+```logql
+{service_type="fail2ban"}
+| regexp `\[(?P<jail>[^\]]+)\]\s+(?P<action>Ban|Unban)\s+(?P<banned_ip>\d+\.\d+\.\d+\.\d+)`
+```
+
+See [solti-monitoring/roles/alloy/README.md](../../solti-monitoring/roles/alloy/README.md) for detailed Loki query examples.
+
+### Other Key Variables
+
+```yaml
+# Main configuration
+fail2ban_state: present              # Options: present, configure, absent
+fail2ban_jail_profile: "default"     # Options: default, ispconfig
+
+# Jail defaults
+fail2ban_jail_defaults:
+  ignoreip: 127.0.0.1/8 ::1
+  bantime: 60m
+  findtime: 30m
+  maxretry: 3
+  backend: systemd                   # Backend for log monitoring
+
+# Git versioning
+fail2ban_git_versioning:
+  enabled: yes
+  repository_path: "/opt/solti-repo/fail2ban"
+  manage_repository: yes
+```
+
+See [defaults/main.yml](defaults/main.yml) for complete variable reference.
