@@ -1,40 +1,56 @@
 ---
-# tasks file for podman on debian system
-# TODO: make this handle both debian and rhel
+# tasks file for podman - supports both Debian and RHEL families
 
 - block:
-    - name: "Package install podman"
+    - name: "Update package cache (Debian)"
       ansible.builtin.apt:
-        update_cache: true
-        pkg:
-          - podman-compose
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+      become: true
+
+    - name: "Package install podman"
+      ansible.builtin.package:
+        name:
           - podman
           - crun
+        state: present
+      become: true
+
+    - name: "Package install podman-compose (Debian only)"
+      ansible.builtin.package:
+        name: podman-compose
+        state: present
+      when: ansible_os_family == "Debian"
       become: true
 
     - name: "setup the registries to use"
       ansible.builtin.copy:
         src: site-registries.conf
         dest: /etc/containers/registries.conf.d
+      become: true
 
   when: podman_state == 'present'
 
 - block:
     - name: "Package remove podman"
-      ansible.builtin.apt:
-        update_cache: true
-        pkg:
-          - podman-compose
+      ansible.builtin.package:
+        name:
           - podman
           - crun
-        autoclean: true
-        autoremove: true
         state: absent
+      become: true
+
+    - name: "Package remove podman-compose (Debian only)"
+      ansible.builtin.package:
+        name: podman-compose
+        state: absent
+      when: ansible_os_family == "Debian"
       become: true
 
     - name: "Remove the registries file"
       ansible.builtin.file:
         path: /etc/containers/registries.conf.d
         state: absent
+      become: true
 
   when: podman_state == 'absent'
