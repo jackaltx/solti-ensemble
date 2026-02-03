@@ -31,6 +31,10 @@ The collection provides integrated automation with clear patterns:
 - **wireguard**: Modern VPN client with secure key management
 - **ghost**: Installs and configures Ghost CMS
 
+### Communication & Collaboration Pipeline
+
+- **matrix_synapse**: Matrix homeserver for federated real-time communication
+
 ## Security & Auditing Roles
 
 ### [claude_sectest](roles/claude_sectest/README.md)
@@ -90,6 +94,12 @@ The collection provides integrated automation with clear patterns:
 ### [wireguard](roles/wireguard/readme.md)
 
 **WireGuard VPN Client** - Modern VPN client installation and configuration for Rocky Linux 9 and Debian 12 with secure key generation, automatic backups, and comprehensive tag-based execution control.
+
+## Communication & Collaboration
+
+### [matrix_synapse](roles/matrix_synapse/README.md)
+
+**Matrix Synapse Homeserver** - Production-ready Matrix homeserver installation and configuration with support for SQLite or PostgreSQL backends, federation, admin user creation, and reverse proxy deployments. Enables decentralized real-time communication and collaboration.
 
 ## Security Analysis Guides
 
