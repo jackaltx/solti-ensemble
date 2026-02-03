@@ -1,0 +1,31 @@
+---
+# Ansible-lint configuration for solti-ensemble collection
+# Relaxed rules for legacy codebase - incrementally improve over time
+
+skip_list:
+  - fqcn[action-core]  # Use FQCN for builtin actions (too many to fix now)
+  - name[prefix]  # Role var prefix enforcement (legacy roles don't follow this)
+  - var-naming[no-role-prefix]  # Variable naming enforcement
+  - yaml[comments]  # Comment formatting
+  - yaml[line-length]  # Line length (set to warning in yamllint)
+  - ignore-errors  # Use failed_when instead (legacy pattern)
+  - command-instead-of-module  # Use modules instead of shell/command
+  - no-changed-when  # Commands should have changed_when
+  - risky-shell-pipe  # Shells with pipes should set pipefail
+  - schema[meta]  # Meta file schema errors (legacy roles)
+  - role-name  # Role naming standards
+  - name[template]  # Jinja in task names
+  - name[casing]  # Task name casing
+  - yaml[truthy]  # Truthy values (yes/no vs true/false)
+
+# Only enforce critical rules
+warn_list:
+  - experimental
+  - jinja[spacing]
+
+# Exclude paths
+exclude_paths:
+  - .github/
+  - molecule/
+  - .cache/
+  - log/
