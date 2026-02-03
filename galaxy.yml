@@ -12,7 +12,9 @@ description: CI/CD Pipeline to keep my Ansible collection working. This installs
 license:
   - MIT
 license_file: ""
-tags: []
+tags:
+  - infrastructure
+  - tools
 dependencies:
   "community.general": ">=10.0.0"
 

@@ -1,0 +1,35 @@
+---
+# Verify fail2ban alert system
+
+- name: Check timer is running
+  ansible.builtin.systemd:
+    name: fail2ban-alert.timer
+  register: timer_status
+  failed_when: timer_status.status.ActiveState != "active"
+
+- name: Display timer status
+  ansible.builtin.debug:
+    msg: "Timer is {{ timer_status.status.ActiveState }} ({{ timer_status.status.SubState }})"
+
+- name: Run manual alert check
+  ansible.builtin.command: /usr/local/bin/fail2ban-alert.py
+  become: true
+  become_user: "{{ fail2ban_alert_user }}"
+  register: alert_output
+  changed_when: false
+  failed_when: false
+
+- name: Display alert check output
+  ansible.builtin.debug:
+    var: alert_output.stdout_lines
+
+- name: Check Loki connectivity
+  ansible.builtin.uri:
+    url: "{{ fail2ban_alert_loki_url }}/ready"
+    method: GET
+  register: loki_health
+  failed_when: false
+
+- name: Display Loki health
+  ansible.builtin.debug:
+    msg: "Loki is {{ 'ready' if loki_health.status == 200 else 'NOT ready (status: ' + (loki_health.status | string) + ')' }}"

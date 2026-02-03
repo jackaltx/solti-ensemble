@@ -1,0 +1,20 @@
+# Fail2ban Alert Configuration
+# Deployed by: solti-ensemble/roles/alert_notifier
+
+# Loki data source
+loki:
+  url: {{ fail2ban_alert_loki_url }}
+
+# SMTP settings
+smtp:
+  host: {{ fail2ban_alert_smtp_host }}
+  port: {{ fail2ban_alert_smtp_port }}
+  username: {{ fail2ban_alert_smtp_username }}
+  password: {{ fail2ban_alert_smtp_password }}
+  from_address: {{ fail2ban_alert_from_address }}
+
+# Alert thresholds and behavior
+alert:
+  threshold: {{ fail2ban_alert_threshold }}
+  cooldown_minutes: {{ fail2ban_alert_cooldown_minutes }}
+  recipients: {{ fail2ban_alert_recipients }}

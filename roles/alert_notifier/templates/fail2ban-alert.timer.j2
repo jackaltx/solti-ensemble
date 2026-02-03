@@ -1,0 +1,11 @@
+[Unit]
+Description=Fail2ban Alert Check Timer
+Documentation=https://github.com/jackaltx/solti-ensemble
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

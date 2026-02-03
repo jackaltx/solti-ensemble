@@ -1,0 +1,27 @@
+---
+# alert_notifier role defaults
+# Generic notification service for alerts (Loki, InfluxDB, etc.)
+
+# Load SMTP config from user's secrets file
+_smtp_config: "{{ lookup('file', lookup('env', 'HOME') + '/.secrets/smtp-claude-at-jackaltx.yaml') | from_yaml }}"
+
+# Loki endpoint
+fail2ban_alert_loki_url: "http://monitor11.a0a0.org:3100"
+
+# Alert thresholds
+fail2ban_alert_threshold: 10
+fail2ban_alert_cooldown_minutes: 60
+
+# SMTP configuration (loaded from ~/.secrets/smtp-claude-at-jackaltx.yaml)
+fail2ban_alert_smtp_host: "{{ _smtp_config.alert_email_config.smtp }}"
+fail2ban_alert_smtp_port: "{{ _smtp_config.alert_email_config.port }}"
+fail2ban_alert_smtp_username: "{{ _smtp_config.alert_email_config.sender }}"
+fail2ban_alert_smtp_password: "{{ _smtp_config.alert_email_config.passwd }}"
+fail2ban_alert_from_address: "{{ _smtp_config.alert_email_config.sender }}"
+
+# Alert recipients
+fail2ban_alert_recipients: "jack@lavnet.net"
+
+# System user
+fail2ban_alert_user: "fail2ban-alert"
+fail2ban_alert_group: "fail2ban-alert"

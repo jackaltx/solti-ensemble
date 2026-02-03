@@ -1,0 +1,30 @@
+---
+galaxy_info:
+  author: Solti Ensemble
+  description: Generic alert notification service (Loki, InfluxDB)
+  company: jackaltx
+  license: MIT
+  min_ansible_version: 2.9
+
+  platforms:
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: EL
+      versions:
+        - 8
+        - 9
+
+  galaxy_tags:
+    - monitoring
+    - alerting
+    - notifications
+    - loki
+    - influxdb
+
+dependencies: []
