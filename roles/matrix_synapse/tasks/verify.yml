@@ -1,0 +1,74 @@
+---
+# Verification tasks for Matrix Synapse
+# This uses hardcoded paths for Debian/Ubuntu systems since defaults aren't loaded with tasks_from
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+  tags:
+    - verify
+
+- name: Check matrix-synapse service status
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['matrix-synapse.service'] is defined
+      - ansible_facts.services['matrix-synapse.service'].state == 'running'
+      - ansible_facts.services['matrix-synapse.service'].status == 'enabled'
+    success_msg: "Matrix Synapse service is running and enabled"
+    fail_msg: "Matrix Synapse service is not running or not enabled"
+  register: service_check
+  ignore_errors: true
+  tags:
+    - verify
+
+- name: Test Matrix API endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:{{ matrix_port | default(8008) }}/_matrix/client/versions"
+    return_content: true
+    timeout: 10
+  register: matrix_api_test
+  failed_when: false
+  ignore_errors: true
+  tags:
+    - verify
+
+- name: Display API test results
+  ansible.builtin.debug:
+    msg:
+      - "API Status: {{ 'UP' if matrix_api_test.status == 200 else 'DOWN' }}"
+      - "Supported versions: {{ matrix_api_test.json.versions | length if matrix_api_test.json is defined else 0 }}"
+  tags:
+    - verify
+
+- name: Check configuration files exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/matrix-synapse/homeserver.yaml
+    - /etc/matrix-synapse/conf.d/server_name.yaml
+    - /etc/matrix-synapse/homeserver.signing.key
+  register: config_files
+  ignore_errors: true
+  tags:
+    - verify
+
+- name: Check data directory
+  ansible.builtin.stat:
+    path: /var/lib/matrix-synapse
+  register: data_dir_check
+  ignore_errors: true
+  tags:
+    - verify
+
+- name: Display verification summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Matrix Synapse Verification ==="
+      - "Server: {{ matrix_server_name | default('unknown') }}"
+      - "Service: {{ 'Running' if service_check is success else 'Stopped/Failed' }}"
+      - "API Port: {{ matrix_port | default(8008) }}"
+      - "API Status: {{ 'UP' if matrix_api_test.status | default(0) == 200 else 'DOWN' }}"
+      - "Config dir: /etc/matrix-synapse"
+      - "Config files: {{ config_files.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | list | length }}/3 found"
+      - "Data directory: {{ 'exists' if data_dir_check.stat.exists else 'missing' }}"
+  tags:
+    - verify

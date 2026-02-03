@@ -1,0 +1,87 @@
+---
+# Configuration tasks for Matrix Synapse
+
+- name: Deploy homeserver.yaml configuration
+  ansible.builtin.template:
+    src: homeserver.yaml.j2
+    dest: "{{ matrix_config_file }}"
+    owner: root
+    group: "{{ matrix_group }}"
+    mode: '0644'
+  notify:
+    - validate matrix config
+    - restart matrix-synapse
+  tags:
+    - config
+
+- name: Deploy server_name configuration
+  ansible.builtin.template:
+    src: server_name.yaml.j2
+    dest: "{{ matrix_config_d_dir }}/server_name.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - validate matrix config
+    - restart matrix-synapse
+  tags:
+    - config
+
+- name: Ensure log configuration exists
+  ansible.builtin.stat:
+    path: "{{ matrix_log_config }}"
+  register: log_config_stat
+  tags:
+    - config
+
+- name: Create default log configuration if missing
+  ansible.builtin.copy:
+    dest: "{{ matrix_log_config }}"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      version: 1
+      formatters:
+        precise:
+          format: '%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(message)s'
+      handlers:
+        console:
+          class: logging.StreamHandler
+          formatter: precise
+      loggers:
+        synapse:
+          level: INFO
+      root:
+        level: INFO
+        handlers: [console]
+  when: not log_config_stat.stat.exists
+  tags:
+    - config
+
+- name: Ensure signing key exists
+  ansible.builtin.stat:
+    path: "{{ matrix_signing_key }}"
+  register: signing_key_stat
+  tags:
+    - config
+
+- name: Generate signing key if missing
+  ansible.builtin.command:
+    cmd: "{{ matrix_venv_path }}/bin/python -m synapse.app.homeserver --config-path={{ matrix_config_file }} --config-path={{ matrix_config_d_dir }}/ --generate-keys"
+  become: true
+  become_user: "{{ matrix_user }}"
+  when: not signing_key_stat.stat.exists
+  changed_when: true
+  tags:
+    - config
+
+- name: Set signing key permissions
+  ansible.builtin.file:
+    path: "{{ matrix_signing_key }}"
+    owner: "{{ matrix_user }}"
+    group: "{{ matrix_group }}"
+    mode: '0600'
+  when: signing_key_stat.stat.exists or not signing_key_stat.stat.exists
+  tags:
+    - config

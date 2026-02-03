@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  author: jackaltx
+  description: Matrix Synapse homeserver installation and configuration
+  company: SOLTI Labs
+  license: MIT-0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+  galaxy_tags:
+    - matrix
+    - synapse
+    - messaging
+    - federation
+    - chat
+
+dependencies: []
