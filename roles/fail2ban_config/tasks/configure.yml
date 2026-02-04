@@ -27,7 +27,7 @@
     dest: /etc/fail2ban/fail2ban.local
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -39,7 +39,7 @@
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -53,7 +53,7 @@
     dest: /etc/fail2ban/action.d/abuseipdb.conf
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -110,7 +110,7 @@
         dest: "/etc/fail2ban/jail.d/{{ item }}"
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
       loop: "{{ enabled_jail_files | default([]) }}"
       notify: restart fail2ban
 
@@ -136,7 +136,7 @@
         dest: "/etc/fail2ban/filter.d/{{ item }}"
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
       loop: "{{ enabled_filter_files | default([]) }}"
       notify: restart fail2ban
 
