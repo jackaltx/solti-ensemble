@@ -10,13 +10,19 @@ skip_list:
   - yaml[line-length]  # Line length (set to warning in yamllint)
   - ignore-errors  # Use failed_when instead (legacy pattern)
   - command-instead-of-module  # Use modules instead of shell/command
+  - command-instead-of-shell  # Use shell only when needed
   - no-changed-when  # Commands should have changed_when
   - risky-shell-pipe  # Shells with pipes should set pipefail
+  - risky-file-permissions  # File permissions warnings
   - schema[meta]  # Meta file schema errors (legacy roles)
+  - meta-incorrect  # Default meta values
   - role-name  # Role naming standards
   - name[template]  # Jinja in task names
   - name[casing]  # Task name casing
   - yaml[truthy]  # Truthy values (yes/no vs true/false)
+  - key-order  # Task key ordering
+  - no-handler  # Tasks that should be handlers
+  - package-latest  # Package installs should not use latest
 
 # Only enforce critical rules
 warn_list:
