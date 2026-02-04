@@ -41,3 +41,5 @@ exclude_paths:
   - log/
   - roles/mariadb/  # Uses community.mysql collection (not in CI)
   - roles/ispconfig_cert_converge/  # Uses community.mysql collection (not in CI)
+  - roles/nfs-client/  # Uses ansible.posix collection (not in CI)
+  - roles/sshd_harden/  # Uses community.crypto collection (not in CI)
