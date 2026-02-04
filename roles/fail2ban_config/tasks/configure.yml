@@ -145,7 +145,7 @@
     - name: Log enabled fail2ban jail files
       debug:
         msg: |
-          Enabled fail2ban profiles: 
+          Enabled fail2ban profiles:
           {% for profile_name, profile in fail2ban_jails.items() %}
             {% if profile.enabled | bool %}
           - {{ profile_name }}: {{ profile.description }}
