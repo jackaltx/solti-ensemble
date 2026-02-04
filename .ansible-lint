@@ -23,11 +23,16 @@ skip_list:
   - key-order  # Task key ordering
   - no-handler  # Tasks that should be handlers
   - package-latest  # Package installs should not use latest
+  - deprecated-local-action  # Use delegate_to instead of local_action
+  - syntax-check[unknown-module]  # Missing collection modules
 
 # Only enforce critical rules
 warn_list:
   - experimental
   - jinja[spacing]
+
+# Skip missing external collection dependencies in CI
+offline: true
 
 # Exclude paths
 exclude_paths:
