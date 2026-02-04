@@ -2,6 +2,9 @@
 # alert_notifier role defaults
 # Generic notification service for alerts (Loki, InfluxDB, etc.)
 
+# State management
+alert_notifier_state: present  # present or absent
+
 # Load SMTP config from user's secrets file
 _smtp_config: "{{ lookup('file', lookup('env', 'HOME') + '/.secrets/smtp-claude-at-jackaltx.yaml') | from_yaml }}"
 
@@ -9,7 +12,7 @@ _smtp_config: "{{ lookup('file', lookup('env', 'HOME') + '/.secrets/smtp-claude-
 fail2ban_alert_loki_url: "http://monitor11.a0a0.org:3100"
 
 # Alert thresholds
-fail2ban_alert_threshold: 10
+fail2ban_alert_threshold: 25
 fail2ban_alert_cooldown_minutes: 60
 
 # SMTP configuration (loaded from ~/.secrets/smtp-claude-at-jackaltx.yaml)
