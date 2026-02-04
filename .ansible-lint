@@ -24,7 +24,6 @@ skip_list:
   - no-handler  # Tasks that should be handlers
   - package-latest  # Package installs should not use latest
   - deprecated-local-action  # Use delegate_to instead of local_action
-  - syntax-check[unknown-module]  # Missing collection modules
 
 # Only enforce critical rules
 warn_list:
@@ -40,3 +39,5 @@ exclude_paths:
   - molecule/
   - .cache/
   - log/
+  - roles/mariadb/  # Uses community.mysql collection (not in CI)
+  - roles/ispconfig_cert_converge/  # Uses community.mysql collection (not in CI)
