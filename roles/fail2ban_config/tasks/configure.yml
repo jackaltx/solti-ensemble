@@ -67,7 +67,7 @@
         state: directory
         owner: root
         group: root
-        mode: 0755
+        mode: "0755"
 
     # Remove all current jail files except those with leading underscore
     - name: Find current jail files
