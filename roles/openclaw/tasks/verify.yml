@@ -1,0 +1,41 @@
+---
+# Verify openclaw is installed and running
+# Self-contained — works standalone via svc-exec.sh without a prior deploy run
+
+- name: Check openclaw binary exists
+  ansible.builtin.stat:
+    path: /usr/local/bin/openclaw
+  register: openclaw_bin
+
+- name: Report binary status
+  ansible.builtin.debug:
+    msg: "openclaw binary: {{ 'present' if openclaw_bin.stat.exists else 'MISSING' }}"
+
+- name: Check openclaw service state
+  ansible.builtin.systemd:
+    name: openclaw.service
+  register: openclaw_svc
+  failed_when: false
+
+- name: Report service status
+  ansible.builtin.debug:
+    msg: "openclaw service: {{ openclaw_svc.status.ActiveState | default('not found') }} ({{ openclaw_svc.status.SubState | default('') }})"
+
+- name: Check config file exists
+  ansible.builtin.stat:
+    path: "{{ openclaw_config_dir }}/config.yml"
+  register: openclaw_cfg
+
+- name: Report config status
+  ansible.builtin.debug:
+    msg: "openclaw config: {{ 'present' if openclaw_cfg.stat.exists else 'MISSING — run configure' }}"
+
+- name: Fail if binary missing
+  ansible.builtin.fail:
+    msg: "openclaw binary not found — run deploy first"
+  when: not openclaw_bin.stat.exists
+
+- name: Fail if service not active
+  ansible.builtin.fail:
+    msg: "openclaw service is {{ openclaw_svc.status.ActiveState | default('not found') }} — run configure"
+  when: openclaw_svc.status.ActiveState | default('') != 'active'

@@ -1,6 +1,19 @@
 ---
 # Install fail2ban alert notification system
 
+- name: Assert SMTP credentials are provided
+  ansible.builtin.assert:
+    that:
+      - fail2ban_alert_smtp_host | length > 0
+      - fail2ban_alert_smtp_username | length > 0
+      - fail2ban_alert_smtp_password | length > 0
+      - fail2ban_alert_from_address | length > 0
+    fail_msg: >
+      SMTP credentials not set. Load them explicitly in your playbook:
+        vars_files:
+          - ~/.secrets/smtp-claude-at-jackaltx.yaml
+      Then set fail2ban_alert_smtp_* vars from alert_email_config.
+
 - name: Create system user for fail2ban-alert
   ansible.builtin.user:
     name: "{{ fail2ban_alert_user }}"

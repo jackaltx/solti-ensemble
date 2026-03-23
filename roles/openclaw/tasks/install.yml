@@ -1,0 +1,47 @@
+---
+# Install OpenClaw agent and its system dependencies
+
+- name: Install Node.js and npm
+  ansible.builtin.package:
+    name:
+      - nodejs
+      - npm
+    state: present
+
+- name: Create openclaw system user
+  ansible.builtin.user:
+    name: "{{ openclaw_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ openclaw_data_dir }}"
+    create_home: false
+
+- name: Create openclaw directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ openclaw_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ openclaw_config_dir }}", owner: root,              mode: '0750' }
+    - { path: "{{ openclaw_data_dir }}",   owner: "{{ openclaw_user }}", mode: '0750' }
+    - { path: "{{ openclaw_log_dir }}",    owner: "{{ openclaw_user }}", mode: '0750' }
+
+- name: Install openclaw npm package
+  community.general.npm:
+    name: "@openclaw/cli"
+    version: "{{ openclaw_version }}"
+    global: true
+    state: present
+
+- name: Deploy openclaw systemd service
+  ansible.builtin.template:
+    src: openclaw.service.j2
+    dest: /etc/systemd/system/openclaw.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Restart openclaw

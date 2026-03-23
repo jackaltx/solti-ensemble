@@ -1,0 +1,73 @@
+---
+# Write openclaw config — requires environment variables
+# Run via: source ~/.secrets/openclaw-<host>.env && manage-svc.sh -h <host> openclaw configure
+
+- name: Assert required credentials are set
+  ansible.builtin.assert:
+    that:
+      - openclaw_matrix_access_token | length > 0
+      - openclaw_matrix_homeserver | length > 0
+      - openclaw_matrix_user_id | length > 0
+      - openclaw_claude_api_key | length > 0
+      - openclaw_web_token | length > 0
+    fail_msg: |
+      Missing required openclaw credentials.
+      Source ~/.secrets/openclaw-{{ inventory_hostname }}.env before running:
+
+      Required env vars:
+        OPENCLAW_MATRIX_ACCESS_TOKEN
+        OPENCLAW_CLAUDE_API_KEY
+        OPENCLAW_WEB_TOKEN
+
+      Required inventory vars:
+        openclaw_matrix_homeserver
+        openclaw_matrix_user_id
+
+      See solti-ensemble/roles/openclaw/CLAUDE.md for setup instructions.
+
+- name: Assert HA credentials if enabled
+  ansible.builtin.assert:
+    that:
+      - openclaw_ha_token | length > 0
+      - openclaw_ha_url | length > 0
+    fail_msg: |
+      openclaw_ha_enabled is true but HA credentials missing.
+      Set OPENCLAW_HA_TOKEN env var and openclaw_ha_url in inventory.
+  when: openclaw_ha_enabled | bool
+
+- name: Assert email credentials if enabled
+  ansible.builtin.assert:
+    that:
+      - openclaw_email_user | length > 0
+      - openclaw_email_pass | length > 0
+      - openclaw_email_smtp_host | length > 0
+    fail_msg: |
+      openclaw_email_enabled is true but email credentials missing.
+      Set OPENCLAW_EMAIL_USER, OPENCLAW_EMAIL_PASS, OPENCLAW_EMAIL_SMTP_HOST env vars.
+  when: openclaw_email_enabled | bool
+
+- name: Assert Gitea credentials if enabled
+  ansible.builtin.assert:
+    that:
+      - openclaw_gitea_token | length > 0
+      - openclaw_gitea_url | length > 0
+    fail_msg: |
+      openclaw_gitea_enabled is true but Gitea credentials missing.
+      Set OPENCLAW_GITEA_TOKEN and OPENCLAW_GITEA_URL env vars.
+  when: openclaw_gitea_enabled | bool
+
+- name: Deploy openclaw config
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ openclaw_config_dir }}/config.yml"
+    owner: root
+    group: "{{ openclaw_group }}"
+    mode: '0640'
+  notify: Restart openclaw
+
+- name: Enable and start openclaw service
+  ansible.builtin.systemd:
+    name: openclaw.service
+    enabled: true
+    state: started
+    daemon_reload: true

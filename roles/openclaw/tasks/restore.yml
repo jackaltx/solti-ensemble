@@ -1,0 +1,77 @@
+---
+# Restore openclaw from a backup tarball produced by backup.yml.
+# Requires: package already installed (run present state first, or use restore state
+# which calls install.yml automatically).
+#
+# Required var: openclaw_restore_file — absolute path on the remote host
+
+- name: Assert restore file is specified
+  ansible.builtin.assert:
+    that: openclaw_restore_file | length > 0
+    fail_msg: "openclaw_restore_file must be set to the absolute path of the backup tarball"
+
+- name: Check backup file exists on remote
+  ansible.builtin.stat:
+    path: "{{ openclaw_restore_file }}"
+  register: _restore_stat
+
+- name: Fail if backup file not found
+  ansible.builtin.fail:
+    msg: "Backup file not found: {{ openclaw_restore_file }}"
+  when: not _restore_stat.stat.exists
+
+- name: Stop openclaw service before restore
+  ansible.builtin.systemd:
+    name: openclaw.service
+    state: stopped
+  failed_when: false
+
+- name: Remove existing config directory before restore
+  ansible.builtin.file:
+    path: "{{ openclaw_config_dir }}"
+    state: absent
+
+- name: Remove existing data directory before restore
+  ansible.builtin.file:
+    path: "{{ openclaw_data_dir }}"
+    state: absent
+
+- name: Extract backup tarball
+  ansible.builtin.unarchive:
+    src: "{{ openclaw_restore_file }}"
+    dest: /
+    remote_src: true
+    owner: root
+    group: root
+
+- name: Set ownership on config directory
+  ansible.builtin.file:
+    path: "{{ openclaw_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+    recurse: true
+
+- name: Set ownership on data directory
+  ansible.builtin.file:
+    path: "{{ openclaw_data_dir }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: "0750"
+    recurse: true
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Start openclaw service after restore
+  ansible.builtin.systemd:
+    name: openclaw.service
+    state: started
+    enabled: true
+
+- name: Report restore complete
+  ansible.builtin.debug:
+    msg: "openclaw restored from {{ openclaw_restore_file }}"

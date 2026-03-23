@@ -1,0 +1,17 @@
+---
+# OS update — apt update + full upgrade
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: full
+  register: pi5_apt_upgrade
+
+- name: Report upgraded packages
+  ansible.builtin.debug:
+    msg: "Upgraded {{ pi5_apt_upgrade.stdout_lines | select('match', '^Inst') | list | length }} packages"
+  when: pi5_apt_upgrade.stdout_lines is defined

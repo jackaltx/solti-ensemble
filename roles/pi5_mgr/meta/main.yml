@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: pi5_mgr
+  author: jackaltx
+  description: Raspberry Pi 5 base configuration — OS updates and Hailo AI HAT driver management
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+        - bookworm
+  galaxy_tags:
+    - raspberry_pi
+    - hailo
+    - arm
+
+dependencies: []

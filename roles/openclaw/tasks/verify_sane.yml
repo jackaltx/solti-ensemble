@@ -1,0 +1,158 @@
+---
+# Behavioral health check — run after deploy or ad-hoc to confirm openclaw is
+# not just active but actually behaving (port bound, memory sane, no crash loop).
+# No external dependencies — self-contained.
+
+# ------------------------------------------------------------------
+# 1. Port is actually listening
+# ------------------------------------------------------------------
+- name: Check openclaw web port is listening
+  ansible.builtin.command:
+    cmd: "ss -tlnp sport = :{{ openclaw_web_port }}"
+  register: openclaw_port_check
+  changed_when: false
+  failed_when: false
+
+- name: Report port status
+  ansible.builtin.debug:
+    msg: "openclaw port {{ openclaw_web_port }}: {{ 'listening' if openclaw_web_port | string in openclaw_port_check.stdout else 'NOT listening' }}"
+
+- name: Fail if port not listening
+  ansible.builtin.fail:
+    msg: "openclaw port {{ openclaw_web_port }} is not bound — service may have failed to start its web server"
+  when: openclaw_web_port | string not in openclaw_port_check.stdout
+
+# ------------------------------------------------------------------
+# 2. Memory within bounds
+# ------------------------------------------------------------------
+- name: Get openclaw service memory usage
+  ansible.builtin.command:
+    cmd: systemctl show openclaw.service --property=MemoryCurrent
+  register: openclaw_memory_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse memory value
+  ansible.builtin.set_fact:
+    openclaw_memory_bytes: "{{ openclaw_memory_raw.stdout | regex_replace('MemoryCurrent=', '') | trim }}"
+
+- name: Report memory usage
+  ansible.builtin.debug:
+    msg: >-
+      openclaw memory: {{ (openclaw_memory_bytes | int / 1048576) | round(1) }} MB
+      (limit: {{ openclaw_sane_memory_max_mb }} MB)
+  when: openclaw_memory_bytes != '[not set]' and openclaw_memory_bytes != 'MemoryCurrent='
+
+- name: Fail if memory exceeds limit
+  ansible.builtin.fail:
+    msg: >-
+      openclaw memory {{ (openclaw_memory_bytes | int / 1048576) | round(1) }} MB
+      exceeds limit {{ openclaw_sane_memory_max_mb }} MB — possible memory leak
+  when:
+    - openclaw_memory_bytes != '[not set]'
+    - openclaw_memory_bytes | int > (openclaw_sane_memory_max_mb | int * 1048576)
+
+# ------------------------------------------------------------------
+# 3. CPU not pegged (point-in-time snapshot)
+# ------------------------------------------------------------------
+- name: Get openclaw PID
+  ansible.builtin.command:
+    cmd: systemctl show openclaw.service --property=MainPID
+  register: openclaw_pid_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse PID
+  ansible.builtin.set_fact:
+    openclaw_pid: "{{ openclaw_pid_raw.stdout | regex_replace('MainPID=', '') | trim }}"
+
+- name: Get CPU usage snapshot
+  ansible.builtin.command:
+    cmd: "ps -p {{ openclaw_pid }} -o %cpu --no-headers"
+  register: openclaw_cpu_raw
+  changed_when: false
+  failed_when: false
+  when: openclaw_pid | int > 0
+
+- name: Report CPU usage
+  ansible.builtin.debug:
+    msg: "openclaw CPU (snapshot): {{ openclaw_cpu_raw.stdout | trim }}%"
+  when:
+    - openclaw_pid | int > 0
+    - openclaw_cpu_raw.rc == 0
+
+- name: Warn if CPU is high
+  ansible.builtin.debug:
+    msg: "WARNING: openclaw CPU {{ openclaw_cpu_raw.stdout | trim }}% is above 80% — possible runaway loop"
+  when:
+    - openclaw_pid | int > 0
+    - openclaw_cpu_raw.rc == 0
+    - (openclaw_cpu_raw.stdout | trim | float) > 80
+
+# ------------------------------------------------------------------
+# 4. No crash loop
+# ------------------------------------------------------------------
+- name: Get service restart count
+  ansible.builtin.command:
+    cmd: systemctl show openclaw.service --property=NRestarts
+  register: openclaw_restarts_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse restart count
+  ansible.builtin.set_fact:
+    openclaw_restarts: "{{ openclaw_restarts_raw.stdout | regex_replace('NRestarts=', '') | trim | int }}"
+
+- name: Report restart count
+  ansible.builtin.debug:
+    msg: "openclaw restarts since last start: {{ openclaw_restarts }} (limit: {{ openclaw_sane_restart_max }})"
+
+- name: Fail if crash looping
+  ansible.builtin.fail:
+    msg: "openclaw has restarted {{ openclaw_restarts }} times — possible crash loop (limit: {{ openclaw_sane_restart_max }})"
+  when: openclaw_restarts | int > openclaw_sane_restart_max | int
+
+# ------------------------------------------------------------------
+# 5. Recent journal errors
+# ------------------------------------------------------------------
+- name: Count recent journal errors
+  ansible.builtin.shell:
+    cmd: "journalctl -u openclaw --since '1 hour ago' -p err --no-pager -q | wc -l"
+  register: openclaw_error_count
+  changed_when: false
+  failed_when: false
+
+- name: Report journal error count
+  ansible.builtin.debug:
+    msg: "openclaw journal errors (last 1h): {{ openclaw_error_count.stdout | trim }} (limit: {{ openclaw_sane_error_threshold }})"
+
+- name: Fail if too many journal errors
+  ansible.builtin.fail:
+    msg: >-
+      openclaw has {{ openclaw_error_count.stdout | trim }} errors in the last hour
+      (limit: {{ openclaw_sane_error_threshold }}) — check: journalctl -u openclaw -p err
+  when: openclaw_error_count.stdout | trim | int > openclaw_sane_error_threshold | int
+
+# ------------------------------------------------------------------
+# 6. Web UI responds
+# ------------------------------------------------------------------
+- name: Probe web UI
+  ansible.builtin.uri:
+    url: "http://localhost:{{ openclaw_web_port }}"
+    method: GET
+    status_code: [200, 401, 403]
+    timeout: 5
+  register: openclaw_http_probe
+  failed_when: false
+
+- name: Report web UI status
+  ansible.builtin.debug:
+    msg: "openclaw web UI: HTTP {{ openclaw_http_probe.status | default('no response') }}"
+
+- name: Fail if web UI unreachable
+  ansible.builtin.fail:
+    msg: >-
+      openclaw web UI at http://localhost:{{ openclaw_web_port }} returned
+      {{ openclaw_http_probe.status | default('no response') }} —
+      service may be running but web server is broken
+  when: openclaw_http_probe.status | default(0) | int not in [200, 401, 403]

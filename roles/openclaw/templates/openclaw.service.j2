@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenClaw AI Agent
+Documentation=https://github.com/openclaw/openclaw
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ openclaw_user }}
+Group={{ openclaw_group }}
+WorkingDirectory={{ openclaw_data_dir }}
+ExecStart=/usr/local/bin/openclaw --config {{ openclaw_config_dir }}/config.yml
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths={{ openclaw_data_dir }} {{ openclaw_log_dir }}
+
+# Web UI ports — access controlled by Unifi zone, not firewall rules
+# {{ openclaw_web_port }} = Control UI / WebSocket gateway
+# {{ openclaw_web_alt_port }} = Browser dashboard
+
+[Install]
+WantedBy=multi-user.target

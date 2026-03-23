@@ -1,0 +1,25 @@
+---
+# State control — matches manage-svc.sh STATE_MAP
+# present   → deploy/update
+# configure → present + configure unattended-upgrades
+# absent    → remove hailo packages (OS packages left intact)
+pi5_mgr_state: present
+
+# Hailo AI HAT control
+# detect  → run lspci, install if found
+# present → install unconditionally
+# absent  → remove hailo-all if installed
+pi5_hailo: detect
+
+# OS update behavior
+# Runs apt update + apt upgrade on every "present" apply
+pi5_os_update: true
+
+# Unattended-upgrades — applied when pi5_mgr_state == "configure"
+pi5_unattended_upgrades: true
+pi5_unattended_upgrades_origins:
+  - "origin=Debian,codename=${distro_codename}"
+  - "origin=Raspbian,codename=${distro_codename}"
+  - "origin=Raspberry Pi Foundation,codename=${distro_codename}"
+pi5_unattended_upgrades_reboot: false
+pi5_unattended_upgrades_reboot_time: "02:00"
