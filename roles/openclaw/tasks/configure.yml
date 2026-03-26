@@ -56,13 +56,45 @@
       Set OPENCLAW_GITEA_TOKEN and OPENCLAW_GITEA_URL env vars.
   when: openclaw_gitea_enabled | bool
 
-- name: Deploy openclaw config
-  ansible.builtin.template:
-    src: config.yml.j2
-    dest: "{{ openclaw_config_dir }}/config.yml"
-    owner: root
+- name: Create openclaw user home directory
+  ansible.builtin.file:
+    path: "/home/{{ openclaw_user }}/.openclaw"
+    state: directory
+    owner: "{{ openclaw_user }}"
     group: "{{ openclaw_group }}"
-    mode: '0640'
+    mode: '0700'
+
+- name: Install Matrix plugin
+  ansible.builtin.command:
+    cmd: openclaw plugins install @openclaw/matrix
+    creates: /home/{{ openclaw_user }}/.openclaw/plugins/@openclaw/matrix
+  become: true
+  become_user: "{{ openclaw_user }}"
+
+- name: Deploy openclaw config (JSON5 format)
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: "/home/{{ openclaw_user }}/.openclaw/openclaw.json"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: '0600'
+  notify: Restart openclaw
+
+- name: Create Matrix credentials directory
+  ansible.builtin.file:
+    path: "/home/{{ openclaw_user }}/.openclaw/credentials/matrix"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: '0700'
+
+- name: Deploy Matrix credentials
+  ansible.builtin.template:
+    src: matrix-credentials.json.j2
+    dest: "/home/{{ openclaw_user }}/.openclaw/credentials/matrix/credentials.json"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: '0600'
   notify: Restart openclaw
 
 - name: Enable and start openclaw service

@@ -50,6 +50,9 @@ openclaw_web_bind: "0.0.0.0"          # Override to 127.0.0.1 if SSH tunnel pref
 # Add room IDs (not aliases) to restrict scope
 openclaw_matrix_allowed_rooms: []
 
+# Matrix DM allowlist — users permitted to DM the bot
+openclaw_matrix_allowed_users: []
+
 # Optional integrations — disabled by default, enabled per host in inventory
 openclaw_email_enabled: false
 openclaw_email_smtp_port: 587

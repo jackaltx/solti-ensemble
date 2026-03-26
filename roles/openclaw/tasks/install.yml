@@ -1,12 +1,31 @@
 ---
 # Install OpenClaw agent and its system dependencies
+# Uses official installation method from https://docs.openclaw.ai/install/raspberry-pi
 
-- name: Install Node.js and npm
+- name: Install system dependencies
   ansible.builtin.package:
     name:
-      - nodejs
-      - npm
+      - curl
+      - git
+      - build-essential
     state: present
+
+- name: Check if openclaw is already installed
+  ansible.builtin.command: which openclaw
+  register: openclaw_binary_check
+  changed_when: false
+  failed_when: false
+
+- name: Run official OpenClaw installation script
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://openclaw.ai/install.sh | bash
+    creates: /usr/local/bin/openclaw
+  when: openclaw_binary_check.rc != 0
+  register: openclaw_install
+
+- name: Verify openclaw binary exists
+  ansible.builtin.command: which openclaw
+  changed_when: false
 
 - name: Create openclaw system user
   ansible.builtin.user:
@@ -27,13 +46,6 @@
     - { path: "{{ openclaw_config_dir }}", owner: root,              mode: '0750' }
     - { path: "{{ openclaw_data_dir }}",   owner: "{{ openclaw_user }}", mode: '0750' }
     - { path: "{{ openclaw_log_dir }}",    owner: "{{ openclaw_user }}", mode: '0750' }
-
-- name: Install openclaw npm package
-  community.general.npm:
-    name: "@openclaw/cli"
-    version: "{{ openclaw_version }}"
-    global: true
-    state: present
 
 - name: Deploy openclaw systemd service
   ansible.builtin.template:
