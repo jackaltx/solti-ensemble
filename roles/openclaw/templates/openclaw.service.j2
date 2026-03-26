@@ -10,7 +10,7 @@ User={{ openclaw_user }}
 Group={{ openclaw_group }}
 WorkingDirectory=/home/{{ openclaw_user }}
 Environment="HOME=/home/{{ openclaw_user }}"
-ExecStart=/usr/local/bin/openclaw daemon
+ExecStart=/usr/bin/openclaw daemon
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

@@ -65,11 +65,32 @@
     mode: '0700'
 
 - name: Install Matrix plugin
-  ansible.builtin.command:
-    cmd: openclaw plugins install @openclaw/matrix
+  ansible.builtin.shell:
+    cmd: HOME=/home/{{ openclaw_user }} openclaw plugins install @openclaw/matrix
     creates: /home/{{ openclaw_user }}/.openclaw/plugins/@openclaw/matrix
-  become: true
-  become_user: "{{ openclaw_user }}"
+  environment:
+    HOME: "/home/{{ openclaw_user }}"
+  register: plugin_install
+  retries: 3
+  delay: 30
+  until: plugin_install.rc == 0
+  failed_when: false  # Don't fail deployment if plugin pending security scan
+
+- name: Warn if Matrix plugin install failed
+  ansible.builtin.debug:
+    msg: |
+      WARNING: Matrix plugin installation failed (may be pending security scan).
+      Error: {{ plugin_install.stderr | default('Unknown') }}
+      Retry manually: ssh thunker 'sudo -u openclaw openclaw plugins install @openclaw/matrix'
+  when: plugin_install.rc != 0
+
+- name: Fix openclaw directory ownership
+  ansible.builtin.file:
+    path: "/home/{{ openclaw_user }}/.openclaw"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    recurse: true
 
 - name: Deploy openclaw config (JSON5 format)
   ansible.builtin.template:

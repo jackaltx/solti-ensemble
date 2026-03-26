@@ -19,13 +19,19 @@
 - name: Run official OpenClaw installation script
   ansible.builtin.shell:
     cmd: curl -fsSL https://openclaw.ai/install.sh | bash
-    creates: /usr/local/bin/openclaw
   when: openclaw_binary_check.rc != 0
   register: openclaw_install
+  failed_when: false  # Ignore TTY error at end - install itself succeeds
 
 - name: Verify openclaw binary exists
   ansible.builtin.command: which openclaw
   changed_when: false
+  register: openclaw_verify
+
+- name: Fail if openclaw not installed
+  ansible.builtin.fail:
+    msg: "OpenClaw installation failed - binary not found"
+  when: openclaw_verify.rc != 0
 
 - name: Create openclaw system user
   ansible.builtin.user:
