@@ -1,51 +1,18 @@
 {
-  // OpenClaw configuration (JSON5 format)
-  // Deployed by: solti-ensemble/roles/openclaw
-  // Host: {{ inventory_hostname }}
-
-  "ai": {
-    "provider": "anthropic",
-    "apiKey": "{{ openclaw_claude_api_key }}",
-    "model": "claude-opus-4-20250514"
-  },
-
-  "channels": {
-    "matrix": {
-      "enabled": true,
-      "homeserver": "{{ openclaw_matrix_homeserver }}",
-      "userId": "{{ openclaw_matrix_user_id }}",
-      "accessToken": "{{ openclaw_matrix_access_token }}",
-
-      // DM settings
-      "dm": {
-        "policy": "allowlist",
-        "allowFrom": {{ openclaw_matrix_allowed_users | default(['@jackal:jackaltx.com']) | to_json }}
-      },
-
-      // Group room settings
-      "groupPolicy": "allowlist",
-      "groups": {
-{% for room in openclaw_matrix_allowed_rooms %}
-        "{{ room }}": {
-          "policy": "open"
-        }{{ "," if not loop.last else "" }}
-{% endfor %}
-      },
-
-      // Auto-join settings
-      "autoJoin": "allowlist",
-      "autoJoinAllowlist": {{ openclaw_matrix_allowed_rooms | to_json }},
-
-      // Reply settings
-      "threadReplies": "always",
-      "replyToMode": "first"
+  "gateway": {
+    "port": {{ openclaw_web_port }},
+    "mode": "local",
+    "bind": "{{ openclaw_web_bind }}",
+    "auth": {
+      "mode": "token",
+      "token": "{{ openclaw_web_token }}"
     }
   },
-
-  "web": {
-    "enabled": true,
-    "bind": "{{ openclaw_web_bind }}",
-    "port": {{ openclaw_web_port }},
-    "token": "{{ openclaw_web_token }}"
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-5-20250929"
+      }
+    }
   }
 }

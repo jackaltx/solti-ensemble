@@ -19,45 +19,23 @@ openclaw_log_dir: /var/log/openclaw
 
 # --- Runtime Secrets (loaded from environment variables) ---
 # Source ~/.secrets/openclaw-<host>.env before running configure
-# These env vars are read at ansible-playbook runtime, templated into config.yml
-openclaw_matrix_access_token: "{{ lookup('env', 'OPENCLAW_MATRIX_ACCESS_TOKEN') | default('') }}"
-openclaw_claude_api_key: "{{ lookup('env', 'OPENCLAW_CLAUDE_API_KEY') | default('') }}"
-openclaw_ha_token: "{{ lookup('env', 'OPENCLAW_HA_TOKEN') | default('') }}"
+# OPENCLAW_WEB_TOKEN required for gateway authentication
 openclaw_web_token: "{{ lookup('env', 'OPENCLAW_WEB_TOKEN') | default('') }}"
 
-# Optional skill credentials (from env vars if skills enabled)
-openclaw_email_user: "{{ lookup('env', 'OPENCLAW_EMAIL_USER') | default('') }}"
-openclaw_email_pass: "{{ lookup('env', 'OPENCLAW_EMAIL_PASS') | default('') }}"
-openclaw_email_smtp_host: "{{ lookup('env', 'OPENCLAW_EMAIL_SMTP_HOST') | default('') }}"
-openclaw_gitea_token: "{{ lookup('env', 'OPENCLAW_GITEA_TOKEN') | default('') }}"
-openclaw_gitea_url: "{{ lookup('env', 'OPENCLAW_GITEA_URL') | default('') }}"
-
-# --- Configuration (from inventory) ---
-# Bot identity
-openclaw_matrix_homeserver: ""        # e.g. https://matrix.jackaltx.com
-openclaw_matrix_user_id: ""           # e.g. @openclaw:jackaltx.com
-
-# Integration endpoints
-openclaw_ha_url: ""                   # e.g. http://homeassistant.local:8123
-
-# Web UI — Control UI and dashboard
-# Binds to 0.0.0.0; access controlled by Unifi network zone (one machine only)
+# Web UI — Control UI and WebSocket gateway
+# Binds to 0.0.0.0; access controlled by Unifi network zone
 openclaw_web_port: 18789              # Control UI / WebSocket gateway
-openclaw_web_alt_port: 18791          # Browser-based dashboard
 openclaw_web_bind: "0.0.0.0"          # Override to 127.0.0.1 if SSH tunnel preferred
 
-# Matrix room allowlist — rooms openclaw is permitted to act in
-# Add room IDs (not aliases) to restrict scope
-openclaw_matrix_allowed_rooms: []
-
-# Matrix DM allowlist — users permitted to DM the bot
-openclaw_matrix_allowed_users: []
-
-# Optional integrations — disabled by default, enabled per host in inventory
-openclaw_email_enabled: false
-openclaw_email_smtp_port: 587
-
-openclaw_gitea_enabled: false
+# Matrix plugin configuration
+# NOTE: Matrix plugin is installed but requires interactive onboarding
+# Run: sudo su - openclaw -c "openclaw plugins configure @openclaw/matrix"
+# This will prompt for:
+#   - Matrix homeserver URL
+#   - User ID
+#   - Access token
+#   - Allowed rooms
+# Configuration stored in ~/.openclaw/plugins/@openclaw/matrix/config.json
 
 # Backup
 openclaw_backup_dir: /var/backups/openclaw

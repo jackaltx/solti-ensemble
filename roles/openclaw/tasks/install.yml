@@ -1,6 +1,13 @@
 ---
 # Install OpenClaw agent and its system dependencies
 # Uses official installation method from https://docs.openclaw.ai/install/raspberry-pi
+#
+# Architecture:
+# - OpenClaw binary installed globally (as root)
+# - openclaw user created with /bin/bash shell (not nologin)
+# - User added to systemd-journal group for log access
+# - loginctl linger enabled for persistent user services
+# - OpenClaw self-manages its systemd user service via 'openclaw gateway install'
 
 - name: Install system dependencies
   ansible.builtin.package:
@@ -33,33 +40,30 @@
     msg: "OpenClaw installation failed - binary not found"
   when: openclaw_verify.rc != 0
 
-- name: Create openclaw system user
+- name: Create openclaw user (with shell and systemd permissions)
   ansible.builtin.user:
     name: "{{ openclaw_user }}"
-    system: true
-    shell: /usr/sbin/nologin
-    home: "{{ openclaw_data_dir }}"
-    create_home: false
+    comment: "OpenClaw AI Agent"
+    shell: /bin/bash
+    home: "/home/{{ openclaw_user }}"
+    create_home: true
+    groups:
+      - systemd-journal  # Required for journalctl --user access
+    append: true
+
+- name: Enable loginctl linger for openclaw user
+  ansible.builtin.command: loginctl enable-linger {{ openclaw_user }}
+  args:
+    creates: /var/lib/systemd/linger/{{ openclaw_user }}
 
 - name: Create openclaw directories
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
-    owner: "{{ item.owner }}"
+    owner: "{{ openclaw_user }}"
     group: "{{ openclaw_group }}"
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ openclaw_config_dir }}", owner: root,              mode: '0750' }
-    - { path: "{{ openclaw_data_dir }}",   owner: "{{ openclaw_user }}", mode: '0750' }
-    - { path: "{{ openclaw_log_dir }}",    owner: "{{ openclaw_user }}", mode: '0750' }
-
-- name: Deploy openclaw systemd service
-  ansible.builtin.template:
-    src: openclaw.service.j2
-    dest: /etc/systemd/system/openclaw.service
-    owner: root
-    group: root
-    mode: '0644'
-  notify:
-    - Reload systemd
-    - Restart openclaw
+    - { path: "{{ openclaw_data_dir }}",   mode: '0750' }
+    - { path: "{{ openclaw_log_dir }}",    mode: '0750' }
+    - { path: "{{ openclaw_backup_dir }}", mode: '0750' }
