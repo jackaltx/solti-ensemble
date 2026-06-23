@@ -438,10 +438,10 @@ echo "Output file: $OUTPUT_FILE"
 echo "Getting domains to test..."
 case "$DOMAIN_SOURCE" in
     "file")
-        domains_array=($(get_file_domains))
+        mapfile -t domains_array < <(get_file_domains)
         ;;
     "ispconfig-db")
-        domains_array=($(get_ispconfig_domains))
+        mapfile -t domains_array < <(get_ispconfig_domains)
         ;;
 esac
 
@@ -518,14 +518,15 @@ for domain in "${domains_array[@]}"; do
 done
 
 # Calculate summary statistics
-spf_pass_count=$(grep -c '"status": "pass"' "$OUTPUT_FILE" | head -1 || echo "0")
-dkim_pass_count=0
-dmarc_pass_count=0
-mx_pass_count=0
-
-# Since we can't easily count across sections, we'll calculate during the loop
-# For now, we'll use a simpler approach and count after completion
 echo "Calculating validation summary..."
+spf_pass=$(jq '[.dns_validation.spf_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+spf_fail=$(jq '[.dns_validation.spf_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dkim_pass=$(jq '[.dns_validation.dkim_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dkim_fail=$(jq '[.dns_validation.dkim_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dmarc_pass=$(jq '[.dns_validation.dmarc_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dmarc_fail=$(jq '[.dns_validation.dmarc_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+mx_pass=$(jq '[.dns_validation.mx_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+mx_fail=$(jq '[.dns_validation.mx_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
 
 cat >> "$OUTPUT_FILE" << EOF
     ],
@@ -533,23 +534,23 @@ cat >> "$OUTPUT_FILE" << EOF
       "total_domains": ${#domains_array[@]},
       "spf_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.spf_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.spf_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $spf_pass,
+        "fail": $spf_fail
       },
       "dkim_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dkim_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dkim_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $dkim_pass,
+        "fail": $dkim_fail
       },
       "dmarc_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dmarc_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dmarc_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $dmarc_pass,
+        "fail": $dmarc_fail
       },
       "mx_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.mx_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.mx_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $mx_pass,
+        "fail": $mx_fail
       }
     },
     "domains_list": [$(printf '"%s",' "${domains_array[@]}" | sed 's/,$//')]
@@ -573,6 +574,7 @@ if command -v jq &> /dev/null; then
     if [[ -n "$failed_spf" ]]; then
         echo ""
         echo "Domains without SPF records:"
+        # shellcheck disable=SC2001  # multi-line per-line prefix, not a simple substitution
         echo "$failed_spf" | sed 's/^/  - /'
     fi
 fi
