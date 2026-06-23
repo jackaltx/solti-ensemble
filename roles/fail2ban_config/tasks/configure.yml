@@ -27,7 +27,7 @@
     dest: /etc/fail2ban/fail2ban.local
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -39,7 +39,7 @@
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -53,7 +53,7 @@
     dest: /etc/fail2ban/action.d/abuseipdb.conf
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify: restart fail2ban
 
 # .............................................................................
@@ -67,7 +67,7 @@
         state: directory
         owner: root
         group: root
-        mode: 0755
+        mode: "0755"
 
     # Remove all current jail files except those with leading underscore
     - name: Find current jail files
@@ -110,7 +110,7 @@
         dest: "/etc/fail2ban/jail.d/{{ item }}"
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
       loop: "{{ enabled_jail_files | default([]) }}"
       notify: restart fail2ban
 
@@ -136,7 +136,7 @@
         dest: "/etc/fail2ban/filter.d/{{ item }}"
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
       loop: "{{ enabled_filter_files | default([]) }}"
       notify: restart fail2ban
 
@@ -145,7 +145,7 @@
     - name: Log enabled fail2ban jail files
       debug:
         msg: |
-          Enabled fail2ban profiles: 
+          Enabled fail2ban profiles:
           {% for profile_name, profile in fail2ban_jails.items() %}
             {% if profile.enabled | bool %}
           - {{ profile_name }}: {{ profile.description }}

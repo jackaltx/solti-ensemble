@@ -1,0 +1,45 @@
+---
+# Ansible-lint configuration for solti-ensemble collection
+# Relaxed rules for legacy codebase - incrementally improve over time
+
+skip_list:
+  - fqcn[action-core]  # Use FQCN for builtin actions (too many to fix now)
+  - name[prefix]  # Role var prefix enforcement (legacy roles don't follow this)
+  - var-naming[no-role-prefix]  # Variable naming enforcement
+  - yaml[comments]  # Comment formatting
+  - yaml[line-length]  # Line length (set to warning in yamllint)
+  - ignore-errors  # Use failed_when instead (legacy pattern)
+  - command-instead-of-module  # Use modules instead of shell/command
+  - command-instead-of-shell  # Use shell only when needed
+  - no-changed-when  # Commands should have changed_when
+  - risky-shell-pipe  # Shells with pipes should set pipefail
+  - risky-file-permissions  # File permissions warnings
+  - schema[meta]  # Meta file schema errors (legacy roles)
+  - meta-incorrect  # Default meta values
+  - role-name  # Role naming standards
+  - name[template]  # Jinja in task names
+  - name[casing]  # Task name casing
+  - yaml[truthy]  # Truthy values (yes/no vs true/false)
+  - key-order  # Task key ordering
+  - no-handler  # Tasks that should be handlers
+  - package-latest  # Package installs should not use latest
+  - deprecated-local-action  # Use delegate_to instead of local_action
+
+# Only enforce critical rules
+warn_list:
+  - experimental
+  - jinja[spacing]
+
+# Skip missing external collection dependencies in CI
+offline: true
+
+# Exclude paths
+exclude_paths:
+  - .github/
+  - molecule/
+  - .cache/
+  - log/
+  - roles/mariadb/  # Uses community.mysql collection (not in CI)
+  - roles/ispconfig_cert_converge/  # Uses community.mysql collection (not in CI)
+  - roles/nfs-client/  # Uses ansible.posix collection (not in CI)
+  - roles/sshd_harden/  # Uses community.crypto collection (not in CI)

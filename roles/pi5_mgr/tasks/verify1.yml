@@ -1,0 +1,43 @@
+---
+# verify1 — extended diagnostics, used by svc-exec.sh
+
+- name: Get Hailo firmware version
+  ansible.builtin.command: hailortcli fw-control identify
+  register: pi5_hailo_fw
+  changed_when: false
+  failed_when: false
+
+- name: Get Hailo dmesg entries
+  ansible.builtin.command: dmesg
+  register: pi5_dmesg
+  changed_when: false
+
+- name: Get OS release info
+  ansible.builtin.command: uname -a
+  register: pi5_uname
+  changed_when: false
+
+- name: Get unattended-upgrades status
+  ansible.builtin.command: systemctl is-active unattended-upgrades
+  register: pi5_uu_status
+  changed_when: false
+  failed_when: false
+
+- name: Get lspci Hailo entry
+  ansible.builtin.command: lspci
+  register: pi5_lspci_full
+  changed_when: false
+
+- name: Report extended diagnostics
+  ansible.builtin.debug:
+    msg:
+      - "=== Kernel ==="
+      - "{{ pi5_uname.stdout }}"
+      - "=== Hailo PCIe device ==="
+      - "{{ pi5_lspci_full.stdout_lines | select('search', 'Hailo') | list | join('\n') | default('none found') }}"
+      - "=== Hailo dmesg entries ==="
+      - "{{ pi5_dmesg.stdout_lines | select('search', 'hailo') | list | join('\n') | default('none') }}"
+      - "=== Hailo firmware ==="
+      - "{{ pi5_hailo_fw.stdout | default('hailortcli not available or device absent') }}"
+      - "=== unattended-upgrades ==="
+      - "{{ pi5_uu_status.stdout | default('not installed') }}"

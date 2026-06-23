@@ -9,15 +9,15 @@
     login_password: "{{ ispconfig_db.password }}"
     login_db: "{{ ispconfig_db.database }}"
     query: |
-      SELECT 
-        domain, 
+      SELECT
+        domain,
         subdomain,
         ssl,
         ssl_domain,
         document_root,
         active
-      FROM web_domain 
-      WHERE ssl = 'y' 
+      FROM web_domain
+      WHERE ssl = 'y'
         AND active = 'y'
         AND type = 'vhost'
   register: ssl_websites_query

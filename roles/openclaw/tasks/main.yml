@@ -1,0 +1,29 @@
+---
+# openclaw: AI agent daemon — Matrix-connected, Claude API reasoning
+#
+# Privilege model:
+#   The play sets become: true, so ALL tasks here run as root.
+#   To run a specific task as the connecting user, add become: false to that task.
+#   The openclaw service process itself runs as the 'openclaw' system user —
+#   that's enforced by User= in the systemd unit, not by Ansible become.
+#   Pattern: lavender (ssh) → root (become) → openclaw (systemd User=)
+
+- name: Install OpenClaw
+  when: openclaw_state == "present" or openclaw_state == "configure"
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure OpenClaw
+  when: openclaw_state == "configure"
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Remove OpenClaw
+  when: openclaw_state == "absent"
+  ansible.builtin.include_tasks: remove.yml
+
+- name: Restore OpenClaw from backup
+  when: openclaw_state == "restore"
+  block:
+    - name: Install OpenClaw package
+      ansible.builtin.include_tasks: install.yml
+    - name: Restore OpenClaw data from backup
+      ansible.builtin.include_tasks: restore.yml

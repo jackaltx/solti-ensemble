@@ -1,0 +1,28 @@
+---
+# alert_notifier role defaults
+# Generic notification service for alerts (Loki, InfluxDB, etc.)
+
+# State management
+alert_notifier_state: present  # present or absent
+
+# Loki endpoint
+fail2ban_alert_loki_url: "http://monitor11.a0a0.org:3100"
+
+# Alert thresholds
+fail2ban_alert_threshold: 25
+fail2ban_alert_cooldown_minutes: 60
+
+# SMTP configuration — no defaults, must be passed explicitly via vars_files or --extra-vars
+# See mylab/playbooks/deploy-fail2ban-alert.yml for the expected pattern
+fail2ban_alert_smtp_host: ""
+fail2ban_alert_smtp_port: 587
+fail2ban_alert_smtp_username: ""
+fail2ban_alert_smtp_password: ""
+fail2ban_alert_from_address: ""
+
+# Alert recipients
+fail2ban_alert_recipients: "jack@lavnet.net"
+
+# System user
+fail2ban_alert_user: "fail2ban-alert"
+fail2ban_alert_group: "fail2ban-alert"

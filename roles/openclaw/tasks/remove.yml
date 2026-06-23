@@ -1,0 +1,55 @@
+---
+# Remove openclaw — stops service, removes package and config
+
+- name: Get openclaw UID
+  ansible.builtin.command: id -u {{ openclaw_user }}
+  register: openclaw_uid
+  changed_when: false
+  failed_when: false
+
+- name: Stop openclaw gateway user service
+  become: true
+  become_user: "{{ openclaw_user }}"
+  ansible.builtin.systemd:
+    name: openclaw-gateway.service
+    enabled: false
+    state: stopped
+    scope: user
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ openclaw_uid.stdout }}"
+  failed_when: false
+  when: openclaw_uid.rc == 0
+
+- name: Disable loginctl linger
+  ansible.builtin.command: loginctl disable-linger {{ openclaw_user }}
+  failed_when: false
+  when: openclaw_uid.rc == 0
+
+- name: Remove openclaw binary
+  ansible.builtin.file:
+    path: /usr/local/bin/openclaw
+    state: absent
+
+- name: Remove npm global directory
+  ansible.builtin.file:
+    path: /usr/local/lib/node_modules/openclaw
+    state: absent
+
+- name: Remove data directory
+  ansible.builtin.file:
+    path: "{{ openclaw_data_dir }}"
+    state: absent
+  when: openclaw_delete_data | bool
+
+- name: Remove log directory
+  ansible.builtin.file:
+    path: "{{ openclaw_log_dir }}"
+    state: absent
+  when: openclaw_delete_data | bool
+
+- name: Remove openclaw user and home directory
+  ansible.builtin.user:
+    name: "{{ openclaw_user }}"
+    state: absent
+    remove: true
+  when: openclaw_delete_data | bool

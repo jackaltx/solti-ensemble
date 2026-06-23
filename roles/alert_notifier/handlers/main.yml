@@ -1,0 +1,16 @@
+---
+# Handlers for alert_notifier role
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable fail2ban-alert timer
+  ansible.builtin.systemd:
+    name: fail2ban-alert.timer
+    enabled: true
+
+- name: Restart fail2ban-alert timer
+  ansible.builtin.systemd:
+    name: fail2ban-alert.timer
+    state: restarted

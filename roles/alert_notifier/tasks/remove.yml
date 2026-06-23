@@ -1,0 +1,49 @@
+---
+# Remove fail2ban alert notification system
+
+- name: Stop and disable timer
+  ansible.builtin.systemd:
+    name: fail2ban-alert.timer
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  ignore_errors: true
+
+- name: Stop service
+  ansible.builtin.systemd:
+    name: fail2ban-alert.service
+    state: stopped
+  ignore_errors: true
+
+- name: Remove systemd timer
+  ansible.builtin.file:
+    path: /etc/systemd/system/fail2ban-alert.timer
+    state: absent
+  notify: Reload systemd
+
+- name: Remove systemd service
+  ansible.builtin.file:
+    path: /etc/systemd/system/fail2ban-alert.service
+    state: absent
+  notify: Reload systemd
+
+- name: Remove alert script
+  ansible.builtin.file:
+    path: /usr/local/bin/fail2ban-alert.py
+    state: absent
+
+- name: Remove config directory
+  ansible.builtin.file:
+    path: /etc/fail2ban-alert
+    state: absent
+
+- name: Remove state directory
+  ansible.builtin.file:
+    path: /var/lib/fail2ban-alert
+    state: absent
+
+- name: Remove system user
+  ansible.builtin.user:
+    name: "{{ fail2ban_alert_user }}"
+    state: absent
+    remove: true

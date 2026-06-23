@@ -14,11 +14,14 @@ The collection provides integrated automation with clear patterns:
 
 - **claude_sectest**: Multi-script security auditing with Git-based change tracking and Claude AI analysis
 - **sshd_harden**: SSH daemon hardening with modern cryptographic algorithms
+- **fail2ban_config**: Manages Fail2Ban with Git-based configuration versioning
 
 ### Infrastructure & Database Pipeline  
 
 - **mariadb**: Database server with security-focused setup and backup functionality
 - **nfs-client**: Storage integration for distributed deployments with optimized performance
+- **ispconfig_backup**: A generic, git-based configuration backup and audit role for ISPConfig environments
+- **ispconfig_cert_converge**: Converges SSL certificates for ISPConfig
 
 ### Development & Platform Pipeline
 
@@ -26,6 +29,11 @@ The collection provides integrated automation with clear patterns:
 - **gitea**: Self-hosted Git service with complete lifecycle management
 - **podman**: Rootless container engine as Docker alternative
 - **wireguard**: Modern VPN client with secure key management
+- **ghost**: Installs and configures Ghost CMS
+
+### Communication & Collaboration Pipeline
+
+- **matrix_synapse**: Matrix homeserver for federated real-time communication
 
 ## Security & Auditing Roles
 
@@ -36,6 +44,20 @@ The collection provides integrated automation with clear patterns:
 ### [sshd_harden](roles/sshd_harden/README.md)
 
 **SSH Hardening Role** - Hardens SSH daemon configuration according to sshaudit.com recommendations. Restricts cryptographic algorithms to secure options, configures connection timeouts, disables dangerous features, generates secure key pairs, and filters weak Diffie-Hellman moduli.
+
+### [fail2ban_config](roles/fail2ban_config/README.md)
+
+**Fail2Ban with Git Configuration Versioning** - This Ansible role manages Fail2Ban with an integrated Git-based configuration tracking system, allowing for complete version control of all changes to your Fail2Ban setup.
+
+## ISPConfig Roles
+
+### [ispconfig_backup](roles/ispconfig_backup/README.md)
+
+**ISPConfig Backup Role** - A generic, git-based configuration backup and audit role specifically designed for ISPConfig environments. This role provides comprehensive backup and change detection for all ISPConfig-managed services including mail, web, DNS, and security configurations.
+
+### [ispconfig_cert_converge](roles/ispconfig_cert_converge/README.md)
+
+**ISPConfig Certificate Converge** - This role converges SSL certificates for ISPConfig.
 
 ## Database & Storage Roles
 
@@ -61,11 +83,23 @@ The collection provides integrated automation with clear patterns:
 
 **Podman Container Engine** - Daemonless container engine installation with rootless container support, Podman Compose functionality, and secure registry configuration as a Docker alternative.
 
+## Publishing Platforms
+
+### [ghost](roles/ghost/README.md)
+
+**Ghost CMS** - This role installs and configures Ghost CMS, a modern publishing platform for blogs and websites.
+
 ## Network & VPN
 
 ### [wireguard](roles/wireguard/readme.md)
 
 **WireGuard VPN Client** - Modern VPN client installation and configuration for Rocky Linux 9 and Debian 12 with secure key generation, automatic backups, and comprehensive tag-based execution control.
+
+## Communication & Collaboration
+
+### [matrix_synapse](roles/matrix_synapse/README.md)
+
+**Matrix Synapse Homeserver** - Production-ready Matrix homeserver installation and configuration with support for SQLite or PostgreSQL backends, federation, admin user creation, and reverse proxy deployments. Enables decentralized real-time communication and collaboration.
 
 ## Security Analysis Guides
 

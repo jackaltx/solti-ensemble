@@ -82,7 +82,7 @@ setup_audit_repo() {
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
@@ -97,7 +97,7 @@ setup_audit_repo() {
 apply_retention() {
     if [[ -n "$RETAIN_COMMITS" ]]; then
         echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
-        cd "$AUDIT_DIR"
+        cd "$AUDIT_DIR" || exit
         
         # Count current commits
         COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
@@ -215,370 +215,7 @@ get_file_domains() {
     fi
     
     echo "Reading domains from file: $DOMAINS_FILE" >&2
-    grep -v '^#' "$DOMAINS_FILE" | grep -v '^
-
-# Escape string for JSON
-json_escape() {
-    local input="$1"
-    printf '%s\n' "$input" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//'
-}
-
-# Test SPF record
-test_spf() {
-    local domain="$1"
-    local spf_record
-    local spf_status="fail"
-    local spf_mechanisms=()
-    local spf_errors=()
-    
-    # Query TXT records for SPF
-    spf_record=$(dig +short TXT "$domain" | grep -E '^"v=spf1' | sed 's/"//g' | head -1)
-    
-    if [[ -n "$spf_record" ]]; then
-        spf_status="pass"
-        
-        # Parse SPF mechanisms
-        IFS=' ' read -ra mechanisms <<< "$spf_record"     
-        for mechanism in "${mechanisms[@]}"; do
-            case "$mechanism" in
-                v=spf1) ;;  # Version, skip
-                ~all|-all|+all|?all) spf_mechanisms+=("$mechanism") ;;
-                mx|a) spf_mechanisms+=("$mechanism") ;;  # Standalone mx and a mechanisms
-                include:*|a:*|mx:*|ip4:*|ip6:*|exists:*|redirect:*) spf_mechanisms+=("$mechanism") ;;
-                *) spf_errors+=("Unknown mechanism: $mechanism") ;;
-            esac
-        done
-        
-        # Check for common issues
-        if [[ "$spf_record" == *"+all"* ]]; then
-            spf_errors+=("WARNING: +all allows any server to send")
-        fi
-        
-        if [[ "$spf_record" != *"all"* ]]; then
-            spf_errors+=("WARNING: No 'all' mechanism found")
-        fi
-    else
-        spf_errors+=("No SPF record found")
-    fi
-    
-    cat << EOF
-    {
-      "domain": "$domain",
-      "record": "$(json_escape "$spf_record")",
-      "status": "$spf_status",
-      "mechanisms": [$(printf '"%s",' "${spf_mechanisms[@]}" | sed 's/,$//')]",
-      "errors": [$(printf '"%s",' "${spf_errors[@]}" | sed 's/,$//')]
-    }
-EOF
-}
-
-# Test DKIM record
-test_dkim() {
-    local domain="$1"
-    local dkim_status="fail"
-    local dkim_selectors=("default" "mail" "dkim" "selector1" "selector2" "s1" "s2")
-    local found_selectors=()
-    local dkim_errors=()
-    
-    # Test common DKIM selectors
-    for selector in "${dkim_selectors[@]}"; do
-        local dkim_record
-        dkim_record=$(dig +short TXT "${selector}._domainkey.${domain}" 2>/dev/null)
-        
-        if [[ -n "$dkim_record" && "$dkim_record" == *"v=DKIM1"* ]]; then
-            found_selectors+=("$selector")
-            dkim_status="pass"
-        fi
-    done
-    
-    if [[ ${#found_selectors[@]} -eq 0 ]]; then
-        dkim_errors+=("No DKIM records found for common selectors")
-    fi
-    
-    cat << EOF
-    {
-      "domain": "$domain",
-      "status": "$dkim_status",
-      "selectors_found": [$(printf '"%s",' "${found_selectors[@]}" | sed 's/,$//')]",
-      "selectors_tested": [$(printf '"%s",' "${dkim_selectors[@]}" | sed 's/,$//')]",
-      "errors": [$(printf '"%s",' "${dkim_errors[@]}" | sed 's/,$//')]
-    }
-EOF
-}
-
-# Test DMARC record
-test_dmarc() {
-    local domain="$1"
-    local dmarc_record
-    local dmarc_status="fail"
-    local dmarc_policy=""
-    local dmarc_errors=()
-    
-    # Query DMARC record
-    dmarc_record=$(dig +short TXT "_dmarc.$domain" | grep -E '^"v=DMARC1' | sed 's/"//g' | head -1)
-    
-    if [[ -n "$dmarc_record" ]]; then
-        dmarc_status="pass"
-        
-        # Extract policy
-        if [[ "$dmarc_record" =~ p=([^;]+) ]]; then
-            dmarc_policy="${BASH_REMATCH[1]}"
-        fi
-        
-        # Check for common issues
-        case "$dmarc_policy" in
-            "none") dmarc_errors+=("INFO: Policy is 'none' - monitoring only") ;;
-            "quarantine"|"reject") ;;  # Good policies
-            *) dmarc_errors+=("WARNING: Unknown policy: $dmarc_policy") ;;
-        esac
-    else
-        dmarc_errors+=("No DMARC record found")
-    fi
-    
-    cat << EOF
-    {
-      "domain": "$domain",
-      "record": "$(json_escape "$dmarc_record")",
-      "status": "$dmarc_status",
-      "policy": "$dmarc_policy",
-      "errors": [$(printf '"%s",' "${dmarc_errors[@]}" | sed 's/,$//')]
-    }
-EOF
-}
-
-# Test MX record
-test_mx() {
-    local domain="$1"
-    local mx_records
-    local mx_status="fail"
-    local mx_hosts=()
-    local mx_errors=()
-    
-    # Query MX records
-    mx_records=$(dig +short MX "$domain" 2>/dev/null)
-    
-    if [[ -n "$mx_records" ]]; then
-        mx_status="pass"
-        
-        while IFS= read -r mx_line; do
-            if [[ -n "$mx_line" ]]; then
-                local priority="${mx_line%% *}"
-                local host="${mx_line#* }"
-                host="${host%.}"  # Remove trailing dot
-                mx_hosts+=("{\"priority\":$priority,\"host\":\"$host\"}")
-                
-                # Test if MX host resolves
-                if ! dig +short A "$host" &>/dev/null && ! dig +short AAAA "$host" &>/dev/null; then
-                    mx_errors+=("MX host $host does not resolve")
-                fi
-            fi
-        done <<< "$mx_records"
-    else
-        mx_errors+=("No MX records found")
-    fi
-    
-    cat << EOF
-    {
-      "domain": "$domain",
-      "status": "$mx_status",
-      "hosts": [$(printf '%s,' "${mx_hosts[@]}" | sed 's/,$//')]",
-      "errors": [$(printf '"%s",' "${mx_errors[@]}" | sed 's/,$//')]
-    }
-EOF
-}
-
-# Finalize git tracking
-finalize_audit() {
-    cd "$AUDIT_DIR"
-    
-    # Check if there are any changes
-    if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
-        echo "No DNS configuration changes detected since last audit"
-        COMMIT_MSG="DNS audit $AUDIT_DATE - No changes"
-        git add "$OUTPUT_FILENAME" 2>/dev/null || true
-        git commit --allow-empty -m "$COMMIT_MSG" >/dev/null 2>&1
-    else
-        echo "DNS configuration changes detected - committing to audit history"
-        if git rev-parse --verify HEAD >/dev/null 2>&1; then
-            echo "Summary of changes:"
-            git diff --stat "$OUTPUT_FILENAME" 2>/dev/null || echo "  (New DNS audit file)"
-        fi
-        COMMIT_MSG="DNS audit $AUDIT_DATE"
-        git add "$OUTPUT_FILENAME"
-        git commit -m "$COMMIT_MSG" >/dev/null 2>&1
-    fi
-    
-    # Apply retention policy after committing
-    apply_retention
-    
-    echo ""
-    echo "DNS Audit History Summary:"
-    echo "- Repository: $AUDIT_DIR"
-    echo "- Total commits: $(git rev-list --count HEAD 2>/dev/null || echo "1")"
-    if [[ -n "$RETAIN_COMMITS" ]]; then
-        echo "- Retention policy: Last $RETAIN_COMMITS commits"
-    else
-        echo "- Retention policy: Keep all history (production mode)"
-    fi
-}
-
-# Main execution
-echo "Starting ISPConfig3 DNS Security Audit..."
-
-# Check dependencies
-check_dependencies
-
-# Setup the audit repository
-setup_audit_repo
-
-OUTPUT_FILE="$AUDIT_DIR/$OUTPUT_FILENAME"
-echo "Output file: $OUTPUT_FILE"
-
-# Get domains list
-echo "Getting domains to test..." >&2
-case "$DOMAIN_SOURCE" in
-    "file")
-        domains_array=($(get_file_domains))
-        ;;
-    "ispconfig-db")
-        domains_array=($(get_ispconfig_domains))
-        ;;
-esac
-
-if [[ ${#domains_array[@]} -eq 0 ]]; then
-    echo "ERROR: No domains found to test" >&2
-    exit 1
-fi
-
-echo "Found ${#domains_array[@]} domains to test: ${domains_array[*]}" >&2
-
-# Initialize JSON output
-cat > "$OUTPUT_FILE" << EOF
-{
-  "audit_info": {
-    "version": "$SCRIPT_VERSION",
-    "date": "$AUDIT_DATE",
-    "hostname": "$HOSTNAME",
-    "purpose": "DNS Security Records Validation",
-    "audit_directory": "$AUDIT_DIR",
-    "retention_policy": $([ -n "$RETAIN_COMMITS" ] && echo "\"Last $RETAIN_COMMITS commits\"" || echo "\"Keep all history\""),
-    "domain_source": "$DOMAIN_SOURCE",
-    "domains_file": "$([ -n "$DOMAINS_FILE" ] && echo "$DOMAINS_FILE" || echo "null")"
-  },
-  "dns_validation": {
-    "domains_tested": ${#domains_array[@]},
-    "spf_records": [
-EOF
-
-# Test SPF records
-echo "Testing SPF records..." >&2
-first_spf=true
-for domain in "${domains_array[@]}"; do
-    [[ "$first_spf" == true ]] && first_spf=false || echo "," >> "$OUTPUT_FILE"
-    test_spf "$domain" >> "$OUTPUT_FILE"
-done
-
-cat >> "$OUTPUT_FILE" << EOF
-    ],
-    "dkim_records": [
-EOF
-
-# Test DKIM records
-echo "Testing DKIM records..." >&2
-first_dkim=true
-for domain in "${domains_array[@]}"; do
-    [[ "$first_dkim" == true ]] && first_dkim=false || echo "," >> "$OUTPUT_FILE"
-    test_dkim "$domain" >> "$OUTPUT_FILE"
-done
-
-cat >> "$OUTPUT_FILE" << EOF
-    ],
-    "dmarc_records": [
-EOF
-
-# Test DMARC records
-echo "Testing DMARC records..." >&2
-first_dmarc=true
-for domain in "${domains_array[@]}"; do
-    [[ "$first_dmarc" == true ]] && first_dmarc=false || echo "," >> "$OUTPUT_FILE"
-    test_dmarc "$domain" >> "$OUTPUT_FILE"
-done
-
-cat >> "$OUTPUT_FILE" << EOF
-    ],
-    "mx_records": [
-EOF
-
-# Test MX records
-echo "Testing MX records..." >&2
-first_mx=true
-for domain in "${domains_array[@]}"; do
-    [[ "$first_mx" == true ]] && first_mx=false || echo "," >> "$OUTPUT_FILE"
-    test_mx "$domain" >> "$OUTPUT_FILE"
-done
-
-# Calculate summary statistics
-spf_pass_count=$(grep -c '"status": "pass"' "$OUTPUT_FILE" | head -1 || echo "0")
-dkim_pass_count=0
-dmarc_pass_count=0
-mx_pass_count=0
-
-# Since we can't easily count across sections, we'll calculate during the loop
-# For now, we'll use a simpler approach and count after completion
-echo "Calculating validation summary..."
-
-cat >> "$OUTPUT_FILE" << EOF
-    ],
-    "validation_summary": {
-      "total_domains": ${#domains_array[@]},
-      "spf_tests": {
-        "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.spf_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.spf_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
-      },
-      "dkim_tests": {
-        "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dkim_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dkim_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
-      },
-      "dmarc_tests": {
-        "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dmarc_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dmarc_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
-      },
-      "mx_tests": {
-        "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.mx_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.mx_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
-      }
-    },
-    "domains_list": [$(printf '"%s",' "${domains_array[@]}" | sed 's/,$//')]
-  }
-}
-EOF
-
-echo "DNS audit completed successfully!"
-echo "Report saved to: $OUTPUT_FILE"
-echo ""
-echo "Quick Summary:"
-echo "- Domains tested: ${#domains_array[@]}"
-echo "- SPF records found: $(jq -r '.dns_validation.validation_summary.spf_tests.pass // "unknown"' "$OUTPUT_FILE" 2>/dev/null)"
-echo "- DKIM records found: $(jq -r '.dns_validation.validation_summary.dkim_tests.pass // "unknown"' "$OUTPUT_FILE" 2>/dev/null)"
-echo "- DMARC records found: $(jq -r '.dns_validation.validation_summary.dmarc_tests.pass // "unknown"' "$OUTPUT_FILE" 2>/dev/null)"
-echo "- MX records found: $(jq -r '.dns_validation.validation_summary.mx_tests.pass // "unknown"' "$OUTPUT_FILE" 2>/dev/null)"
-
-# Show failed domains if any
-if command -v jq &> /dev/null; then
-    local failed_spf=$(jq -r '.dns_validation.spf_records[] | select(.status == "fail") | .domain' "$OUTPUT_FILE" 2>/dev/null)
-    if [[ -n "$failed_spf" ]]; then
-        echo ""
-        echo "Domains without SPF records:"
-        echo "$failed_spf" | sed 's/^/  - /'
-    fi
-fi
-
-# Finalize git tracking and apply retention
-finalize_audit | sort -u
+    grep -v '^#' "$DOMAINS_FILE" | grep -v '^$'
 }
 
 # Escape string for JSON
@@ -752,7 +389,7 @@ EOF
 
 # Finalize git tracking
 finalize_audit() {
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
@@ -801,10 +438,10 @@ echo "Output file: $OUTPUT_FILE"
 echo "Getting domains to test..."
 case "$DOMAIN_SOURCE" in
     "file")
-        domains_array=($(get_file_domains))
+        mapfile -t domains_array < <(get_file_domains)
         ;;
     "ispconfig-db")
-        domains_array=($(get_ispconfig_domains))
+        mapfile -t domains_array < <(get_ispconfig_domains)
         ;;
 esac
 
@@ -881,14 +518,15 @@ for domain in "${domains_array[@]}"; do
 done
 
 # Calculate summary statistics
-spf_pass_count=$(grep -c '"status": "pass"' "$OUTPUT_FILE" | head -1 || echo "0")
-dkim_pass_count=0
-dmarc_pass_count=0
-mx_pass_count=0
-
-# Since we can't easily count across sections, we'll calculate during the loop
-# For now, we'll use a simpler approach and count after completion
 echo "Calculating validation summary..."
+spf_pass=$(jq '[.dns_validation.spf_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+spf_fail=$(jq '[.dns_validation.spf_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dkim_pass=$(jq '[.dns_validation.dkim_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dkim_fail=$(jq '[.dns_validation.dkim_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dmarc_pass=$(jq '[.dns_validation.dmarc_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+dmarc_fail=$(jq '[.dns_validation.dmarc_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+mx_pass=$(jq '[.dns_validation.mx_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+mx_fail=$(jq '[.dns_validation.mx_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
 
 cat >> "$OUTPUT_FILE" << EOF
     ],
@@ -896,23 +534,23 @@ cat >> "$OUTPUT_FILE" << EOF
       "total_domains": ${#domains_array[@]},
       "spf_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.spf_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.spf_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $spf_pass,
+        "fail": $spf_fail
       },
       "dkim_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dkim_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dkim_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $dkim_pass,
+        "fail": $dkim_fail
       },
       "dmarc_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.dmarc_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.dmarc_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $dmarc_pass,
+        "fail": $dmarc_fail
       },
       "mx_tests": {
         "total": ${#domains_array[@]},
-        "pass": $(jq '[.dns_validation.mx_records[] | select(.status == "pass")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0"),
-        "fail": $(jq '[.dns_validation.mx_records[] | select(.status == "fail")] | length' "$OUTPUT_FILE" 2>/dev/null || echo "0")
+        "pass": $mx_pass,
+        "fail": $mx_fail
       }
     },
     "domains_list": [$(printf '"%s",' "${domains_array[@]}" | sed 's/,$//')]
@@ -932,10 +570,11 @@ echo "- MX records found: $(jq -r '.dns_validation.validation_summary.mx_tests.p
 
 # Show failed domains if any
 if command -v jq &> /dev/null; then
-    local failed_spf=$(jq -r '.dns_validation.spf_records[] | select(.status == "fail") | .domain' "$OUTPUT_FILE" 2>/dev/null)
+    failed_spf=$(jq -r '.dns_validation.spf_records[] | select(.status == "fail") | .domain' "$OUTPUT_FILE" 2>/dev/null)
     if [[ -n "$failed_spf" ]]; then
         echo ""
         echo "Domains without SPF records:"
+        # shellcheck disable=SC2001  # multi-line per-line prefix, not a simple substitution
         echo "$failed_spf" | sed 's/^/  - /'
     fi
 fi

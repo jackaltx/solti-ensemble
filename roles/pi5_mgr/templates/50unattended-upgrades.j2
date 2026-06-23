@@ -1,0 +1,26 @@
+// Managed by Ansible — pi5-mgr role
+// /etc/apt/apt.conf.d/50unattended-upgrades
+
+Unattended-Upgrade::Allowed-Origins {
+{% for origin in pi5_unattended_upgrades_origins %}
+    "{{ origin }}";
+{% endfor %}
+};
+
+Unattended-Upgrade::Package-Blacklist {
+    // hailo-all managed by Ansible — do not auto-upgrade
+    "hailo-all";
+    "hailort";
+    "hailort-pcie-driver";
+};
+
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+Unattended-Upgrade::Automatic-Reboot "{{ pi5_unattended_upgrades_reboot | lower }}";
+{% if pi5_unattended_upgrades_reboot %}
+Unattended-Upgrade::Automatic-Reboot-Time "{{ pi5_unattended_upgrades_reboot_time }}";
+{% endif %}

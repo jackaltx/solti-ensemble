@@ -1,0 +1,10 @@
+---
+# alert_notifier role - state-based installation/removal
+
+- name: Install alert notifier
+  ansible.builtin.include_tasks: install.yml
+  when: alert_notifier_state == 'present'
+
+- name: Remove alert notifier
+  ansible.builtin.include_tasks: remove.yml
+  when: alert_notifier_state == 'absent'

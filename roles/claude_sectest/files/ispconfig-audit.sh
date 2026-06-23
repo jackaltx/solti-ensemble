@@ -66,7 +66,7 @@ setup_audit_repo() {
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
@@ -81,7 +81,7 @@ setup_audit_repo() {
 apply_retention() {
     if [[ -n "$RETAIN_COMMITS" ]]; then
         echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
-        cd "$AUDIT_DIR"
+        cd "$AUDIT_DIR" || exit
         
         # Count current commits
         COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
@@ -289,7 +289,7 @@ if [[ -n "$PHP_VERSION" ]]; then
     PHP_WEB_TYPE="unknown"
     
     # Check for PHP-FPM first (modern setups)
-    if systemctl is-active php${PHP_MAJOR_MINOR}-fpm >/dev/null 2>&1; then
+    if systemctl is-active php"${PHP_MAJOR_MINOR}"-fpm >/dev/null 2>&1; then
         PHP_WEB_INI="$PHP_INI_DIR/fpm/php.ini"
         PHP_WEB_TYPE="php-fpm"
     # Check for Apache module (traditional setups)
@@ -303,7 +303,7 @@ if [[ -n "$PHP_VERSION" ]]; then
     "version": "$PHP_VERSION",
     "web_server_integration": {
       "type": "$PHP_WEB_TYPE",
-      "service_active": $([ "$PHP_WEB_TYPE" = "php-fpm" ] && systemctl is-active php${PHP_MAJOR_MINOR}-fpm >/dev/null 2>&1 && echo "true" || echo "false"),
+      "service_active": $([ "$PHP_WEB_TYPE" = "php-fpm" ] && systemctl is-active php"${PHP_MAJOR_MINOR}"-fpm >/dev/null 2>&1 && echo "true" || echo "false"),
       "config_file": "$PHP_WEB_INI",
       "exists": $([ -f "$PHP_WEB_INI" ] && echo "true" || echo "false"),
       "content": "$(read_config_file "$PHP_WEB_INI")"
@@ -533,9 +533,10 @@ EOF
 
 echo "Finalizing audit report..."
 # Close JSON structure
+TOTAL_CONFIG_FILES_ANALYZED=$(grep -c '"file":' "$OUTPUT_FILE")
 cat >> "$OUTPUT_FILE" << EOF
   "audit_summary": {
-    "total_config_files_analyzed": $(grep -c '"file":' "$OUTPUT_FILE"),
+    "total_config_files_analyzed": $TOTAL_CONFIG_FILES_ANALYZED,
     "services_analyzed": ["apache", "mysql/mariadb", "php", "ispconfig", "ssh", "postfix", "dovecot"],
     "focus": "Configuration security baseline - not runtime monitoring"
   }
@@ -544,7 +545,7 @@ EOF
 
 # Finalize git tracking
 finalize_audit() {
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then

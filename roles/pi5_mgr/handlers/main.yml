@@ -1,0 +1,9 @@
+---
+# Handlers for pi5-mgr role
+
+- name: reboot pi5
+  ansible.builtin.reboot:
+    reboot_timeout: 120
+    connect_timeout: 10
+    msg: "Rebooting to load Hailo kernel module"
+  when: not ansible_check_mode

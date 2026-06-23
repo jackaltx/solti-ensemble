@@ -1,0 +1,45 @@
+# OpenClaw configuration
+# Deployed by: solti-ensemble/roles/openclaw
+# Host: {{ inventory_hostname }}
+
+matrix:
+  homeserver: {{ openclaw_matrix_homeserver }}
+  user_id: {{ openclaw_matrix_user_id }}
+  access_token: {{ openclaw_matrix_access_token }}
+{% if openclaw_matrix_allowed_rooms | length > 0 %}
+  allowed_rooms:
+{% for room in openclaw_matrix_allowed_rooms %}
+    - {{ room }}
+{% endfor %}
+{% endif %}
+
+ai:
+  provider: anthropic
+  api_key: {{ openclaw_claude_api_key }}
+  model: claude-opus-4-6
+
+web:
+  bind: {{ openclaw_web_bind }}
+  port: {{ openclaw_web_port }}
+  alt_port: {{ openclaw_web_alt_port }}
+  token: {{ openclaw_web_token }}
+
+{% if openclaw_ha_token | length > 0 %}
+home_assistant:
+  url: {{ openclaw_ha_url }}
+  token: {{ openclaw_ha_token }}
+{% endif %}
+
+{% if openclaw_email_enabled %}
+email:
+  smtp_host: {{ openclaw_email_smtp_host }}
+  smtp_port: {{ openclaw_email_smtp_port }}
+  username: {{ openclaw_email_user }}
+  password: {{ openclaw_email_pass }}
+{% endif %}
+
+{% if openclaw_gitea_enabled %}
+gitea:
+  url: {{ openclaw_gitea_url }}
+  token: {{ openclaw_gitea_token }}
+{% endif %}

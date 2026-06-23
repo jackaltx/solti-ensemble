@@ -69,7 +69,7 @@
 
 - name: Create Gitea admin user if not found
   ansible.builtin.command: >
-    gitea admin user create 
+    gitea admin user create
     --config {{ gitea_app_ini_path }}
     --username {{ gitea_admin_user }}
     --password '{{ gitea_admin_password }}'

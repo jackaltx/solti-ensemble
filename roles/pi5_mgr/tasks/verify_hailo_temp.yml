@@ -1,0 +1,54 @@
+---
+# verify_hailo_temp — read Hailo chip temperature and throttling state
+# Uses hailo_platform Python API (installed with hailo-all)
+# Safe limit: <85°C. Throttling active above ~87°C.
+# Without a heatsink, expect 70-75°C at idle — add a heatsink for sustained workloads.
+
+- name: Read Hailo chip temperature and throttling state
+  ansible.builtin.shell:
+    cmd: |
+      python3 -c "
+      import hailo_platform
+      device = hailo_platform.VDevice()
+      phys = device.get_physical_devices()
+      ctrl = phys[0].control
+      temp = ctrl.get_chip_temperature()
+      throttle = ctrl.get_throttling_state()
+      ts0 = round(temp.ts0_temperature, 1)
+      ts1 = round(temp.ts1_temperature, 1)
+      avg = round((ts0 + ts1) / 2, 1)
+      print(f'ts0={ts0} ts1={ts1} avg={avg} throttling={throttle}')
+      "
+  register: pi5_hailo_temp
+  changed_when: false
+
+- name: Parse temperature results
+  ansible.builtin.set_fact:
+    hailo_ts0: "{{ pi5_hailo_temp.stdout | regex_search('ts0=([0-9.]+)', '\\1') | first }}"
+    hailo_ts1: "{{ pi5_hailo_temp.stdout | regex_search('ts1=([0-9.]+)', '\\1') | first }}"
+    hailo_avg: "{{ pi5_hailo_temp.stdout | regex_search('avg=([0-9.]+)', '\\1') | first }}"
+    hailo_throttling: "{{ 'True' in pi5_hailo_temp.stdout }}"
+
+- name: Report Hailo temperature
+  ansible.builtin.debug:
+    msg:
+      - "Hailo chip temperature:"
+      - "  TS0: {{ hailo_ts0 }}°C"
+      - "  TS1: {{ hailo_ts1 }}°C"
+      - "  Avg: {{ hailo_avg }}°C"
+      - "  Throttling: {{ hailo_throttling }}"
+      - "  Status: {{ 'WARNING - add heatsink' if hailo_throttling else 'OK' }}"
+
+- name: Warn if chip is throttling
+  ansible.builtin.debug:
+    msg: >
+      WARNING: Hailo chip is throttling ({{ hailo_avg }}°C avg).
+      Install a heatsink on the Hailo M.2 module to prevent performance degradation.
+  when: hailo_throttling | bool
+
+- name: Assert temperature is within safe range
+  ansible.builtin.assert:
+    that:
+      - hailo_avg | float < 90.0
+    fail_msg: "Hailo chip temperature {{ hailo_avg }}°C exceeds safe limit (90°C) — add heatsink immediately"
+    success_msg: "Hailo chip temperature {{ hailo_avg }}°C is within safe range"

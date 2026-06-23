@@ -1,0 +1,85 @@
+---
+# Write openclaw config — requires environment variables
+# Run via: source ~/.secrets/openclaw-<host>.env && manage-svc.sh -h <host> openclaw configure
+
+- name: Assert required credentials are set
+  ansible.builtin.assert:
+    that:
+      - openclaw_web_token | length > 0
+    fail_msg: |
+      Missing required openclaw credentials.
+      Source ~/.secrets/openclaw-{{ inventory_hostname }}.env before running:
+
+      Required env vars:
+        OPENCLAW_WEB_TOKEN
+
+      See solti-ensemble/roles/openclaw/CLAUDE.md for setup instructions.
+
+- name: Create openclaw user home directory
+  ansible.builtin.file:
+    path: "/home/{{ openclaw_user }}/.openclaw"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: '0700'
+
+- name: Get openclaw UID for systemd user services
+  ansible.builtin.command: id -u {{ openclaw_user }}
+  register: openclaw_uid
+  changed_when: false
+
+- name: Install OpenClaw gateway service
+  ansible.builtin.shell: |
+    su - {{ openclaw_user }} -c "openclaw gateway install"
+  args:
+    creates: /home/{{ openclaw_user }}/.config/systemd/user/openclaw-gateway.service
+  register: gateway_install
+
+- name: Install Matrix plugin
+  ansible.builtin.shell: |
+    su - {{ openclaw_user }} -c "openclaw plugins install @openclaw/matrix"
+  args:
+    creates: /home/{{ openclaw_user }}/.openclaw/plugins/@openclaw/matrix
+  register: plugin_install
+  retries: 3
+  delay: 30
+  until: plugin_install.rc == 0
+  failed_when: false  # Don't fail deployment if plugin pending security scan
+
+- name: Warn if Matrix plugin install failed
+  ansible.builtin.debug:
+    msg: |
+      WARNING: Matrix plugin installation failed (may be pending security scan).
+      Error: {{ plugin_install.stderr | default('Unknown') }}
+      Retry manually: ssh {{ inventory_hostname }} 'sudo su - openclaw -c "openclaw plugins install @openclaw/matrix"'
+  when: plugin_install.rc != 0
+
+- name: Fix openclaw directory ownership
+  ansible.builtin.file:
+    path: "/home/{{ openclaw_user }}/.openclaw"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    recurse: true
+
+- name: Deploy openclaw gateway config (JSON format)
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: "/home/{{ openclaw_user }}/.openclaw/openclaw.json"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: '0600'
+  register: config_updated
+
+- name: Restart openclaw gateway if config changed
+  ansible.builtin.shell: |
+    su - {{ openclaw_user }} -c "systemctl --user restart openclaw-gateway.service"
+  when: config_updated.changed
+  register: restart_result
+  failed_when: false
+
+- name: Enable and start openclaw gateway service
+  ansible.builtin.shell: |
+    su - {{ openclaw_user }} -c "systemctl --user enable --now openclaw-gateway.service"
+  register: enable_result
+  failed_when: false

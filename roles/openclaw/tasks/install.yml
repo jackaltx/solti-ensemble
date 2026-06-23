@@ -1,0 +1,69 @@
+---
+# Install OpenClaw agent and its system dependencies
+# Uses official installation method from https://docs.openclaw.ai/install/raspberry-pi
+#
+# Architecture:
+# - OpenClaw binary installed globally (as root)
+# - openclaw user created with /bin/bash shell (not nologin)
+# - User added to systemd-journal group for log access
+# - loginctl linger enabled for persistent user services
+# - OpenClaw self-manages its systemd user service via 'openclaw gateway install'
+
+- name: Install system dependencies
+  ansible.builtin.package:
+    name:
+      - curl
+      - git
+      - build-essential
+    state: present
+
+- name: Check if openclaw is already installed
+  ansible.builtin.command: which openclaw
+  register: openclaw_binary_check
+  changed_when: false
+  failed_when: false
+
+- name: Run official OpenClaw installation script
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://openclaw.ai/install.sh | bash
+  when: openclaw_binary_check.rc != 0
+  register: openclaw_install
+  failed_when: false  # Ignore TTY error at end - install itself succeeds
+
+- name: Verify openclaw binary exists
+  ansible.builtin.command: which openclaw
+  changed_when: false
+  register: openclaw_verify
+
+- name: Fail if openclaw not installed
+  ansible.builtin.fail:
+    msg: "OpenClaw installation failed - binary not found"
+  when: openclaw_verify.rc != 0
+
+- name: Create openclaw user (with shell and systemd permissions)
+  ansible.builtin.user:
+    name: "{{ openclaw_user }}"
+    comment: "OpenClaw AI Agent"
+    shell: /bin/bash
+    home: "/home/{{ openclaw_user }}"
+    create_home: true
+    groups:
+      - systemd-journal  # Required for journalctl --user access
+    append: true
+
+- name: Enable loginctl linger for openclaw user
+  ansible.builtin.command: loginctl enable-linger {{ openclaw_user }}
+  args:
+    creates: /var/lib/systemd/linger/{{ openclaw_user }}
+
+- name: Create openclaw directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ openclaw_data_dir }}", mode: '0750' }
+    - { path: "{{ openclaw_log_dir }}", mode: '0750' }
+    - { path: "{{ openclaw_backup_dir }}", mode: '0750' }

@@ -1,0 +1,33 @@
+---
+# verify_hailo — inference benchmark smoke test
+# Runs hailortcli benchmark against the Pi-optimized YOLOX model.
+# No input images required — HW-only mode exercises the chip end-to-end.
+# Expected baseline: ~33 FPS, ~28ms latency (Hailo-8L on Pi 5)
+
+- name: Check benchmark model exists
+  ansible.builtin.stat:
+    path: /usr/share/hailo-models/yolox_s_leaky_h8l_rpi.hef
+  register: pi5_hef_stat
+
+- name: Fail if model file missing
+  ansible.builtin.fail:
+    msg: "hailo-models package not installed or model file missing"
+  when: not pi5_hef_stat.stat.exists
+
+- name: Run Hailo inference benchmark
+  ansible.builtin.command:
+    cmd: hailortcli benchmark /usr/share/hailo-models/yolox_s_leaky_h8l_rpi.hef
+  register: pi5_benchmark
+  changed_when: false
+  timeout: 120
+
+- name: Report benchmark results
+  ansible.builtin.debug:
+    msg: "{{ pi5_benchmark.stdout_lines | select('match', '.*FPS.*|.*Latency.*|.*Summary.*|.*====.*') | list }}"
+
+- name: Assert FPS is above minimum threshold
+  ansible.builtin.assert:
+    that:
+      - pi5_benchmark.rc == 0
+    fail_msg: "Hailo benchmark failed — chip may not be functioning correctly"
+    success_msg: "Hailo benchmark passed — chip is executing inference"

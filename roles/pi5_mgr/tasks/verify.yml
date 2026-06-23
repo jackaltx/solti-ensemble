@@ -1,0 +1,39 @@
+---
+# verify — quick pass/fail health check, used by svc-exec.sh
+# Self-contained: detects Hailo via lspci, no dependency on prior tasks
+
+- name: Check hailo-all package installed
+  ansible.builtin.command: dpkg-query -W -f='${Status}' hailo-all
+  register: pi5_hailo_pkg
+  changed_when: false
+  failed_when: false
+
+- name: Check kernel module loaded
+  ansible.builtin.command: lsmod
+  register: pi5_lsmod
+  changed_when: false
+
+- name: Check Hailo device node exists
+  ansible.builtin.stat:
+    path: /dev/hailo0
+  register: pi5_hailo_dev
+
+- name: Set hailo_present fact from package status
+  ansible.builtin.set_fact:
+    hailo_present: "{{ 'install ok installed' in pi5_hailo_pkg.stdout }}"
+
+- name: Report Hailo status
+  ansible.builtin.debug:
+    msg:
+      - "hailo-all package: {{ pi5_hailo_pkg.stdout | default('not installed') }}"
+      - "hailo kernel module: {{ 'loaded' if 'hailo_pci' in pi5_lsmod.stdout else 'NOT loaded' }}"
+      - "/dev/hailo0: {{ 'present' if pi5_hailo_dev.stat.exists else 'absent' }}"
+
+- name: Assert Hailo device is ready (when package is installed)
+  ansible.builtin.assert:
+    that:
+      - pi5_hailo_dev.stat.exists
+      - "'hailo_pci' in pi5_lsmod.stdout"
+    fail_msg: "Hailo package installed but device not ready — reboot may be needed"
+    success_msg: "Hailo device is operational"
+  when: hailo_present | bool

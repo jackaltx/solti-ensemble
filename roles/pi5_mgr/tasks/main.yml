@@ -1,0 +1,25 @@
+---
+# pi5-mgr: Raspberry Pi 5 base configuration role
+
+- name: Apply Pi5 base configuration
+  when: pi5_mgr_state == "present" or pi5_mgr_state == "configure"
+  block:
+    - name: Update OS packages
+      include_tasks: os_update.yml
+      when: pi5_os_update | bool
+
+    - name: Configure unattended-upgrades
+      include_tasks: os_configure.yml
+      when: pi5_mgr_state == "configure" and pi5_unattended_upgrades | bool
+
+    - name: Manage Hailo AI HAT
+      include_tasks: hailo.yml
+
+- name: Remove Hailo packages
+  when: pi5_mgr_state == "absent"
+  block:
+    - name: Remove hailo-all
+      ansible.builtin.package:
+        name: hailo-all
+        state: absent
+      notify: reboot pi5

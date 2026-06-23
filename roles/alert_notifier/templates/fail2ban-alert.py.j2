@@ -1,0 +1,139 @@
+{% raw %}#!/usr/bin/env python3
+"""
+Fail2ban Alert Script - Query Loki and send email alerts
+
+Deployed by: solti-ensemble/roles/alert_notifier
+"""
+import requests
+import smtplib
+import yaml
+import time
+from pathlib import Path
+from email.message import EmailMessage
+
+# Config
+CONFIG_FILE = Path("/etc/fail2ban-alert/config.yml")
+STATE_FILE = Path("/var/lib/fail2ban-alert/state.txt")
+
+def load_config():
+    """Load configuration from YAML"""
+    return yaml.safe_load(CONFIG_FILE.read_text())
+
+def query_loki_ban_rate(config):
+    """Query Loki for fail2ban ban count (last hour)"""
+    loki_url = config['loki']['url']
+
+    # LogQL query: count bans in last hour
+    query = '''
+    sum(count_over_time(
+      {service_type="fail2ban"}
+      | regexp `\[(?P<action>Ban)\]`
+      [1h]
+    ))
+    '''
+
+    now_ns = int(time.time() * 1e9)
+    params = {
+        'query': query.strip(),
+        'time': now_ns
+    }
+
+    try:
+        resp = requests.get(
+            f"{loki_url}/loki/api/v1/query",
+            params=params,
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Parse result
+        if data['status'] == 'success' and data['data']['result']:
+            ban_count = int(data['data']['result'][0]['value'][1])
+            return ban_count
+    except Exception as e:
+        print(f"❌ Error querying Loki: {e}")
+        return 0
+
+    return 0
+
+def check_alert_cooldown(config):
+    """Check if we're in cooldown period (avoid spam)"""
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    if not STATE_FILE.exists():
+        return False
+
+    last_alert = float(STATE_FILE.read_text().strip())
+    cooldown_seconds = config['alert']['cooldown_minutes'] * 60
+
+    return (time.time() - last_alert) < cooldown_seconds
+
+def send_alert(ban_count, config):
+    """Send email alert via SMTP"""
+    # Build email
+    msg = EmailMessage()
+    msg['Subject'] = f"⚠️ Fail2ban Alert: {ban_count} bans in last hour"
+    msg['From'] = config['smtp']['from_address']
+    msg['To'] = config['alert']['recipients']
+
+    body = f"""
+Fail2ban ban rate exceeded threshold!
+
+Current rate: {ban_count} bans in last hour
+Threshold: {config['alert']['threshold']} bans/hour
+Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+
+Check Loki for details:
+{config['loki']['url']}/explore
+
+Query to run:
+{{service_type="fail2ban"}} | regexp `\\[(?P<jail>[^\\]]+)\\]\\s+(?P<action>Ban)` | action="Ban"
+
+--
+Automated alert from monitor11.a0a0.org
+fail2ban-alert service
+"""
+    msg.set_content(body.strip())
+
+    # Send via SMTP with TLS
+    try:
+        with smtplib.SMTP(config['smtp']['host'], config['smtp']['port']) as smtp:
+            smtp.starttls()
+            smtp.login(config['smtp']['username'], config['smtp']['password'])
+            smtp.send_message(msg)
+
+        # Update state (record alert time)
+        STATE_FILE.write_text(str(time.time()))
+        print(f"✅ Alert sent: {ban_count} bans/hour → {config['alert']['recipients']}")
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+
+def main():
+    """Main alert check logic"""
+    try:
+        config = load_config()
+    except Exception as e:
+        print(f"❌ Error loading config: {e}")
+        return 1
+
+    # Query current ban rate
+    ban_count = query_loki_ban_rate(config)
+    threshold = config['alert']['threshold']
+
+    print(f"Ban count (last hour): {ban_count} (threshold: {threshold})")
+
+    # Check if alert needed
+    if ban_count > threshold:
+        if not check_alert_cooldown(config):
+            send_alert(ban_count, config)
+        else:
+            print(f"⏸️  Alert suppressed (cooldown active)")
+    else:
+        print(f"✓ Rate below threshold, no alert")
+
+    return 0
+
+if __name__ == '__main__':
+    exit(main())
+{% endraw %}

@@ -1,0 +1,45 @@
+---
+# Hailo AI HAT driver management
+# Supports pi5_hailo: detect | present | absent
+
+- name: Detect Hailo hardware via lspci
+  ansible.builtin.command: lspci
+  register: pi5_lspci_output
+  changed_when: false
+  when: pi5_hailo == "detect"
+
+- name: Set hailo_detected fact
+  ansible.builtin.set_fact:
+    hailo_detected: "{{ 'Hailo' in pi5_lspci_output.stdout }}"
+  when: pi5_hailo == "detect"
+
+- name: Set hailo_detected fact (forced present)
+  ansible.builtin.set_fact:
+    hailo_detected: true
+  when: pi5_hailo == "present"
+
+- name: Set hailo_detected fact (forced absent)
+  ansible.builtin.set_fact:
+    hailo_detected: false
+  when: pi5_hailo == "absent"
+
+- name: Report Hailo detection result
+  ansible.builtin.debug:
+    msg: "Hailo hardware: {{ 'detected' if hailo_detected else 'not detected' }} (pi5_hailo={{ pi5_hailo }})"
+
+- name: Install hailo-all
+  ansible.builtin.apt:
+    name: hailo-all
+    state: present
+    update_cache: false
+  when: hailo_detected | bool
+  register: pi5_hailo_installed
+  notify: reboot pi5
+
+- name: Remove hailo-all
+  ansible.builtin.apt:
+    name: hailo-all
+    state: absent
+  when: not (hailo_detected | bool)
+  register: pi5_hailo_removed
+  notify: reboot pi5

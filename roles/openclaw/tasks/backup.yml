@@ -1,0 +1,50 @@
+---
+# Backup openclaw config and data
+#
+# Usage (via include_role):
+#   ansible.builtin.include_role:
+#     name: jackaltx.solti_ensemble.openclaw
+#     tasks_from: backup
+#
+# Optional vars:
+#   openclaw_backup_dir:    where to write the tarball (default: /var/backups/openclaw)
+#   openclaw_backup_restart: restart service after backup (default: true)
+
+- name: Set backup timestamp
+  ansible.builtin.set_fact:
+    _openclaw_backup_ts: "{{ lookup('pipe', 'date +%Y%m%dT%H%M%S') }}"
+    _openclaw_backup_file: "{{ openclaw_backup_dir }}/openclaw-{{ inventory_hostname }}-{{ lookup('pipe', 'date +%Y%m%dT%H%M%S') }}.tar.gz"
+
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ openclaw_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Stop openclaw service
+  ansible.builtin.systemd:
+    name: openclaw
+    state: stopped
+
+- name: Create backup tarball
+  community.general.archive:
+    path:
+      - "{{ openclaw_config_dir }}"
+      - "{{ openclaw_data_dir }}"
+    dest: "{{ _openclaw_backup_file }}"
+    format: gz
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Report backup location
+  ansible.builtin.debug:
+    msg: "Backup written to {{ _openclaw_backup_file }}"
+
+- name: Start openclaw service
+  ansible.builtin.systemd:
+    name: openclaw
+    state: started
+  when: openclaw_backup_restart | bool

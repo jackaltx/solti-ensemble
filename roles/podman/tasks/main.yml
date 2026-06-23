@@ -1,7 +1,8 @@
 ---
 # tasks file for podman - supports both Debian and RHEL families
 
-- block:
+- name: Install and configure podman
+  block:
     - name: "Update package cache (Debian)"
       ansible.builtin.apt:
         update_cache: yes
@@ -31,7 +32,8 @@
 
   when: podman_state == 'present'
 
-- block:
+- name: Remove podman
+  block:
     - name: "Package remove podman"
       ansible.builtin.package:
         name:

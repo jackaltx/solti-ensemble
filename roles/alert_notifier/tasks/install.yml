@@ -1,0 +1,93 @@
+---
+# Install fail2ban alert notification system
+
+- name: Assert SMTP credentials are provided
+  ansible.builtin.assert:
+    that:
+      - fail2ban_alert_smtp_host | length > 0
+      - fail2ban_alert_smtp_username | length > 0
+      - fail2ban_alert_smtp_password | length > 0
+      - fail2ban_alert_from_address | length > 0
+    fail_msg: >
+      SMTP credentials not set. Load them explicitly in your playbook:
+        vars_files:
+          - ~/.secrets/smtp-claude-at-jackaltx.yaml
+      Then set fail2ban_alert_smtp_* vars from alert_email_config.
+
+- name: Create system user for fail2ban-alert
+  ansible.builtin.user:
+    name: "{{ fail2ban_alert_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Install Python dependencies
+  ansible.builtin.package:
+    name:
+      - python3
+      - python3-requests
+      - python3-yaml
+    state: present
+
+- name: Create config directory
+  ansible.builtin.file:
+    path: /etc/fail2ban-alert
+    state: directory
+    owner: root
+    group: "{{ fail2ban_alert_group }}"
+    mode: '0750'
+
+- name: Create state directory
+  ansible.builtin.file:
+    path: /var/lib/fail2ban-alert
+    state: directory
+    owner: "{{ fail2ban_alert_user }}"
+    group: "{{ fail2ban_alert_group }}"
+    mode: '0750'
+
+- name: Deploy alert script
+  ansible.builtin.template:
+    src: fail2ban-alert.py.j2
+    dest: /usr/local/bin/fail2ban-alert.py
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart fail2ban-alert timer
+
+- name: Deploy config file
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /etc/fail2ban-alert/config.yml
+    owner: root
+    group: "{{ fail2ban_alert_group }}"
+    mode: '0640'
+  notify: Restart fail2ban-alert timer
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: fail2ban-alert.service.j2
+    dest: /etc/systemd/system/fail2ban-alert.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Restart fail2ban-alert timer
+
+- name: Deploy systemd timer
+  ansible.builtin.template:
+    src: fail2ban-alert.timer.j2
+    dest: /etc/systemd/system/fail2ban-alert.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Enable fail2ban-alert timer
+
+- name: Enable and start timer
+  ansible.builtin.systemd:
+    name: fail2ban-alert.timer
+    enabled: true
+    state: started
+    daemon_reload: true
