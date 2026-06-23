@@ -108,7 +108,7 @@
 
 # Install Ghost CLI globally
 - name: Install Ghost CLI globally
-  ansible.builtin.npm:
+  community.general.npm:
     name: ghost-cli
     global: true
     state: present

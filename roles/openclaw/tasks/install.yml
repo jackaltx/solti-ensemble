@@ -64,6 +64,6 @@
     group: "{{ openclaw_group }}"
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ openclaw_data_dir }}",   mode: '0750' }
-    - { path: "{{ openclaw_log_dir }}",    mode: '0750' }
+    - { path: "{{ openclaw_data_dir }}", mode: '0750' }
+    - { path: "{{ openclaw_log_dir }}", mode: '0750' }
     - { path: "{{ openclaw_backup_dir }}", mode: '0750' }

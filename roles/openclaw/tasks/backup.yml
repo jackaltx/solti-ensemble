@@ -29,7 +29,7 @@
     state: stopped
 
 - name: Create backup tarball
-  ansible.builtin.archive:
+  community.general.archive:
     path:
       - "{{ openclaw_config_dir }}"
       - "{{ openclaw_data_dir }}"

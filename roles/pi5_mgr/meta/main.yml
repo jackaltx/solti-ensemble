@@ -11,7 +11,7 @@ galaxy_info:
         - trixie
         - bookworm
   galaxy_tags:
-    - raspberry_pi
+    - raspberrypi
     - hailo
     - arm
 

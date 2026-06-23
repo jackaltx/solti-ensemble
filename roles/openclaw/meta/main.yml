@@ -15,8 +15,8 @@ galaxy_info:
         - noble
         - jammy
   galaxy_tags:
-    - raspberry_pi
-    - ai_agent
+    - raspberrypi
+    - aiagent
     - matrix
     - arm
     - chatbot

@@ -11,7 +11,7 @@
   when: backup_repo_stat.stat.exists
   block:
     - name: Create archive of existing backup repository
-      ansible.builtin.archive:
+      community.general.archive:
         path: "{{ ispconfig_backup_git.repository_path }}"
         dest: "/root/ispconfig-backup-archive-{{ ansible_date_time.iso8601 | regex_replace(':', '-') }}.tar.gz"
         format: gz

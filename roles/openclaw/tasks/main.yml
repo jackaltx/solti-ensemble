@@ -23,5 +23,7 @@
 - name: Restore OpenClaw from backup
   when: openclaw_state == "restore"
   block:
-    - ansible.builtin.include_tasks: install.yml
-    - ansible.builtin.include_tasks: restore.yml
+    - name: Install OpenClaw package
+      ansible.builtin.include_tasks: install.yml
+    - name: Restore OpenClaw data from backup
+      ansible.builtin.include_tasks: restore.yml
