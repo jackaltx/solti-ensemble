@@ -4,6 +4,7 @@
 # Migration Verification Version - Extracts key data for migration verification
 # Compatible with ispconfig-audit.sh command line interface
 
+# shellcheck disable=SC2034  # version marker, not read elsewhere
 SCRIPT_VERSION="2.4"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
@@ -124,8 +125,7 @@ check_dependencies() {
     echo "Testing database connectivity..."
     
     local test_output
-    local test_error
-    
+
     # Build connection string
     local mysql_args=()
     mysql_args+=("-u" "$DB_USER")
@@ -143,6 +143,7 @@ check_dependencies() {
     # Test connection
     if test_output=$(mysql "${mysql_args[@]}" -e "SELECT 1 as test;" 2>&1); then
         echo "✓ Database connection successful"
+        # shellcheck disable=SC2034  # recorded for future audit output, not read yet
         DB_AUTH_METHOD="ispconfig_credentials"
         return 0
     else
@@ -189,7 +190,7 @@ setup_audit_repo() {
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
@@ -204,7 +205,7 @@ setup_audit_repo() {
 apply_retention() {
     if [[ -n "$RETAIN_COMMITS" ]]; then
         echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
-        cd "$AUDIT_DIR"
+        cd "$AUDIT_DIR" || exit
         
         # Count current commits
         COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
@@ -336,7 +337,7 @@ EOF
 
 # Finalize git tracking
 finalize_audit() {
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
@@ -383,9 +384,6 @@ echo "Output file: $OUTPUT_FILE"
 
 # Generate the migration verification SQL
 generate_migration_script
-
-# Build the appropriate MySQL command
-MYSQL_CMD=$(build_mysql_command)
 
 # Run the migration verification query with enhanced error checking
 echo "Extracting ISPConfig migration verification data..."

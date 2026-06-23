@@ -3,6 +3,11 @@
 # Fail2Ban Security Audit Script
 # Compatible with ISPConfig audit framework
 # Output: JSON with Git-based change tracking and retention management
+#
+# shellcheck disable=SC2086,SC2012
+# log_paths is an intentional glob pattern (e.g. "/var/log/fail2ban*") that
+# must expand unquoted to match rotated log files; ls is used for its glob
+# expansion convenience here, not for filename parsing.
 
 SCRIPT_VERSION="1.0"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -75,7 +80,7 @@ setup_audit_repo() {
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
@@ -90,7 +95,7 @@ setup_audit_repo() {
 apply_retention() {
     if [[ -n "$RETAIN_COMMITS" ]]; then
         echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
-        cd "$AUDIT_DIR"
+        cd "$AUDIT_DIR" || exit
         
         # Count current commits
         COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
@@ -152,11 +157,12 @@ get_jail_status() {
     fi
     
     # Parse jail status output
-    local total_failed=$(echo "$jail_status" | grep "Total failed:" | awk '{print $NF}' || echo "0")
-    local total_banned=$(echo "$jail_status" | grep "Total banned:" | awk '{print $NF}' || echo "0")
-    local currently_failed=$(echo "$jail_status" | grep "Currently failed:" | awk '{print $NF}' || echo "0")
-    local currently_banned=$(echo "$jail_status" | grep "Currently banned:" | awk '{print $NF}' || echo "0")
-    local banned_ips=$(echo "$jail_status" | grep "Banned IP list:" | sed 's/.*Banned IP list:[ \t]*//' || echo "")
+    local total_failed total_banned currently_failed currently_banned banned_ips
+    total_failed=$(echo "$jail_status" | grep "Total failed:" | awk '{print $NF}' || echo "0")
+    total_banned=$(echo "$jail_status" | grep "Total banned:" | awk '{print $NF}' || echo "0")
+    currently_failed=$(echo "$jail_status" | grep "Currently failed:" | awk '{print $NF}' || echo "0")
+    currently_banned=$(echo "$jail_status" | grep "Currently banned:" | awk '{print $NF}' || echo "0")
+    banned_ips=$(echo "$jail_status" | grep "Banned IP list:" | sed 's/.*Banned IP list:[ \t]*//' || echo "")
     
     # Create JSON object for jail
     cat << EOF
@@ -175,7 +181,8 @@ EOF
 analyze_fail2ban_logs() {
     local log_paths="/var/log/fail2ban*"
     local analysis_period="7" # Last 7 days
-    local cutoff_date=$(date -d "$analysis_period days ago" +%Y-%m-%d)
+    local cutoff_date
+    cutoff_date=$(date -d "$analysis_period days ago" +%Y-%m-%d)
     
     echo "Analyzing fail2ban logs from the last $analysis_period days (since $cutoff_date)"
     
@@ -193,7 +200,7 @@ analyze_fail2ban_logs() {
     local banned_by_service
     if ls $log_paths >/dev/null 2>&1; then
         banned_by_service=$(grep "Ban " $log_paths 2>/dev/null | \
-                           awk -v cutoff="$cutoff_date" -F[\ \:] '$1 >= cutoff {print $11,$9}' | \
+                           awk -v cutoff="$cutoff_date" -F'[ :]' '$1 >= cutoff {print $11,$9}' | \
                            sort | uniq -c | sort -nr | head -30 || echo "")
     else
         banned_by_service=""
@@ -202,9 +209,10 @@ analyze_fail2ban_logs() {
     # Generate GeoIP data if available
     local geoip_data=""
     if command -v geoiplookup >/dev/null 2>&1 && [[ -n "$top_banned_ips" ]]; then
-        geoip_data=$(echo "$top_banned_ips" | head -10 | awk '{print $2}' | while read ip; do
+        geoip_data=$(echo "$top_banned_ips" | head -10 | awk '{print $2}' | while read -r ip; do
             if [[ -n "$ip" ]]; then
-                local geo=$(geoiplookup -l "$ip" 2>/dev/null | cut -d ':' -f2 || echo "Unknown")
+                local geo
+                geo=$(geoiplookup -l "$ip" 2>/dev/null | cut -d ':' -f2 || echo "Unknown")
                 echo "$ip: $geo"
             fi
         done)
@@ -372,7 +380,7 @@ EOF
 
 # Finalize git tracking
 finalize_audit() {
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then

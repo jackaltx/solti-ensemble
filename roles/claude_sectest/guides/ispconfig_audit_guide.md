@@ -66,7 +66,7 @@ For comprehensive security review and recommendations:
 2. **Upload your audit file**: Drag and drop `/opt/audit/ispconfig-audit/ispconfig-config.json`
 3. **Request analysis**: "Please analyze this ISPConfig3 security audit and provide recommendations"
 
-#### Sample Analysis Request:
+#### Sample Analysis Request
 ```
 I've run a security audit on my ISPConfig3 server. Please analyze this configuration 
 and provide specific security recommendations, focusing on:
@@ -79,7 +79,7 @@ and provide specific security recommendations, focusing on:
 [Attach: ispconfig-config.json]
 ```
 
-### What Claude Analysis Provides:
+### What Claude Analysis Provides
 - **Risk Assessment**: Critical, High, Medium, Low priority findings
 - **Specific Recommendations**: Exact configuration changes needed
 - **Compliance Gaps**: PCI DSS, HIPAA, SOC 2 considerations

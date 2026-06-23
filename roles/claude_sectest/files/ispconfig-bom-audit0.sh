@@ -6,6 +6,7 @@
 
 # This works, but the output is too much to upload to claude
 
+# shellcheck disable=SC2034  # version marker, not read elsewhere
 SCRIPT_VERSION="2.1"
 AUDIT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 HOSTNAME=$(hostname)
@@ -82,7 +83,7 @@ setup_audit_repo() {
     
     # Create directory if it doesn't exist
     mkdir -p "$AUDIT_DIR"
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Initialize git repo if not exists
     if [[ ! -d ".git" ]]; then
@@ -97,7 +98,7 @@ setup_audit_repo() {
 apply_retention() {
     if [[ -n "$RETAIN_COMMITS" ]]; then
         echo "Applying retention policy: keeping last $RETAIN_COMMITS commits"
-        cd "$AUDIT_DIR"
+        cd "$AUDIT_DIR" || exit
         
         # Count current commits
         COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
@@ -773,7 +774,7 @@ EOF
 
 # Finalize git tracking
 finalize_audit() {
-    cd "$AUDIT_DIR"
+    cd "$AUDIT_DIR" || exit
     
     # Check if there are any changes
     if git diff --quiet "$OUTPUT_FILENAME" 2>/dev/null; then
