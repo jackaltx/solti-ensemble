@@ -1,0 +1,14 @@
+Cmnd_Alias MAIL_READ = /usr/sbin/postfix check, \
+                       /usr/bin/doveconf -n, \
+                       /usr/bin/doveadm who, \
+                       /usr/bin/doveadm log errors
+
+Cmnd_Alias MAIL_SVC  = /usr/bin/systemctl reload postfix, \
+                       /usr/bin/systemctl reload dovecot
+
+{% if mail_agent_allow_restart %}
+Cmnd_Alias MAIL_RESTART = /usr/bin/systemctl restart postfix, \
+                          /usr/bin/systemctl restart dovecot
+
+{% endif %}
+{{ mail_agent_user }} ALL=(root) NOPASSWD: MAIL_READ, MAIL_SVC, {% if mail_agent_allow_restart %}MAIL_RESTART, {% endif %}/usr/local/sbin/mail-agent-op

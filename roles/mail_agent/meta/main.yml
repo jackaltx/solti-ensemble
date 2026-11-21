@@ -1,0 +1,16 @@
+#SPDX-License-Identifier: MIT-0
+galaxy_info:
+  author: jackaltx
+  description: Create a restricted mailagent user with a wrapper and sudoers rules for agent access to Postfix and Dovecot
+  license: MIT-0
+  min_ansible_version: "2.14"
+  galaxy_tags:
+    - mail
+    - postfix
+    - dovecot
+    - security
+
+collections:
+  - ansible.posix
+
+dependencies: []

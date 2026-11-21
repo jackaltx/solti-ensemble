@@ -1,0 +1,20 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for mail_agent
+
+mail_agent_state: present           # present | absent
+
+mail_agent_user: mailagent
+mail_agent_groups: []
+mail_agent_ssh_public_key: ""      # required
+mail_agent_ssh_source: ""          # optional — agent IP or CIDR for from= restriction;
+                                   # if empty, key-only auth (restrict) applies with no IP limit
+mail_agent_allow_delete: false     # controls the wrapper's delete action
+mail_agent_allow_restart: true     # controls the systemctl restart rules
+
+# no_log standard — set false to debug credential tasks
+mail_agent_no_log: "{{ mylab_nolog | default(true) }}"
+
+# Loki query tool — not yet implemented (open items 3 & 4 from mail_agent_plan.md)
+# mail_agent_loki_url: ""          # Loki or Grafana datasource proxy endpoint
+# mail_agent_loki_token: ""        # read-only token scoped to mail selector only

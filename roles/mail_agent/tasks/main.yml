@@ -1,0 +1,82 @@
+#SPDX-License-Identifier: MIT-0
+---
+# This creates a wrapper for mail_agent
+
+# this maybe should have a state of present absent
+# I can see needing to remove all trace...or to redeploy during testing
+
+- name: Remove mail agent
+  when: mail_agent_state == "absent"
+  block:
+    - name: Remove sudoers rules
+      ansible.builtin.file:
+        path: "/etc/sudoers.d/{{ mail_agent_user }}"
+        state: absent
+
+    - name: Remove wrapper script
+      ansible.builtin.file:
+        path: /usr/local/sbin/mail-agent-op
+        state: absent
+
+    - name: Remove mail agent user and home
+      ansible.builtin.user:
+        name: "{{ mail_agent_user }}"
+        state: absent
+        remove: true
+
+# These need to be created or come in via inventory
+- name: Validate required variables
+  when: mail_agent_state == "present"
+  ansible.builtin.assert:
+    that:
+      - mail_agent_ssh_public_key | length > 0
+    fail_msg: "mail_agent_ssh_public_key must be set"
+
+# Create the agent on the server
+# bash is correct — the SSH session needs a login shell to run commands; the wrapper
+# itself is a separate script that runs as root via sudo
+- name: Create mail agent user
+  when: mail_agent_state == "present"
+  ansible.builtin.user:
+    name: "{{ mail_agent_user }}"
+    shell: /bin/bash
+    create_home: true
+    groups: "{{ mail_agent_groups }}"
+    append: false
+
+# SMELL not sure I want to restrict to a single address.  the user should only have key access
+# key_options: restrict alone enforces key-only auth (no PTY, no forwarding, no agent)
+# from= is defense-in-depth and is optional — omitted when mail_agent_ssh_source is empty
+- name: Install restricted SSH key
+  when: mail_agent_state == "present"
+  ansible.posix.authorized_key:
+    user: "{{ mail_agent_user }}"
+    key: "{{ mail_agent_ssh_public_key }}"
+    key_options: "restrict{% if mail_agent_ssh_source %},from=\"{{ mail_agent_ssh_source }}\"{% endif %}"
+    exclusive: true
+  no_log: "{{ mail_agent_no_log }}"
+
+# This is wrapper limits the agent access
+# TODO  will need a verify task to test limits
+# It's a template (not a file) because the delete action line is conditional on
+# mail_agent_allow_delete — a static file can't do that
+- name: Install wrapper script
+  when: mail_agent_state == "present"
+  ansible.builtin.template:
+    src: mail-agent-op.j2
+    dest: /usr/local/sbin/mail-agent-op
+    owner: root
+    group: root
+    mode: "0755"
+    validate: /bin/bash -n %s
+
+# This activates the wrapper
+- name: Install sudoers rules
+  when: mail_agent_state == "present"
+  ansible.builtin.template:
+    src: mailagent.sudoers.j2
+    dest: "/etc/sudoers.d/{{ mail_agent_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s

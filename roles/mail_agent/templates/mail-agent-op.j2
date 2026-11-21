@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+die() { echo "denied: $*" >&2; exit 2; }
+[[ $# -eq 2 ]] || die "usage: mail-agent-op <action> <queue-id|user@domain|line-count>"
+action=$1 arg=$2
+
+# The 6-character minimum also blocks the special queue ID "ALL"
+qid()   { [[ $arg =~ ^[0-9A-Za-z]{6,20}$ ]] || die "bad queue id"; }
+user()  {
+  arg=${arg,,}
+  [[ $arg =~ ^[a-z0-9][a-z0-9._+-]*@[a-z0-9.-]+\.[a-z]{2,}$ ]] || die "bad user"
+}
+lines() { [[ $arg =~ ^[0-9]{1,4}$ ]] || die "bad line count"; }
+
+case $action in
+  envelope)  qid;   exec /usr/sbin/postcat -q -e "$arg" ;;
+  hold)      qid;   exec /usr/sbin/postsuper -h "$arg" ;;
+  release)   qid;   exec /usr/sbin/postsuper -H "$arg" ;;
+  requeue)   qid;   exec /usr/sbin/postsuper -r "$arg" ;;
+{% if mail_agent_allow_delete %}
+  delete)    qid;   exec /usr/sbin/postsuper -d "$arg" ;;
+{% endif %}
+  userinfo)  user;  exec /usr/bin/doveadm user "$arg" ;;
+  quota)     user;  exec /usr/bin/doveadm quota get -u "$arg" ;;
+  recalc)    user;  exec /usr/bin/doveadm quota recalc -u "$arg" ;;
+  mailboxes) user;  exec /usr/bin/doveadm mailbox status -u "$arg" "messages vsize unseen" '*' ;;
+  kick)      user;  exec /usr/bin/doveadm kick "$arg" ;;
+  logs)      lines; exec /usr/bin/journalctl --no-pager -n "$arg" -u 'postfix@*' -u dovecot ;;
+  *)         die "unknown action" ;;
+esac
