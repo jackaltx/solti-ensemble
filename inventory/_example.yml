@@ -1,0 +1,75 @@
+---
+# _example.yml — template for adding a new host to solti-ensemble
+#
+# USAGE:
+#   cp inventory/_example.yml inventory/hosts/myhostname.yml
+#   Edit the copy — fill in real values, uncomment the features this host uses.
+#   Keep your host files in a private git repo for backup.
+#
+# HOW IT WORKS:
+#   manage-feature.sh -h myhostname fail2ban present
+#   Ansible finds group_vars/ automatically since the file sits in inventory/hosts/.
+#
+# SECRETS:
+#   Credentials are never stored here — they come from Vault or environment variables.
+#   Source your secrets file before running: source ~/.secrets/LabProvision
+
+all:
+  vars:
+    domain: example.com
+    mylab_nolog: "{{ cluster_secure_log | bool | default(true) }}"
+    ansible_user: youruser
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    mylab_non_ssh: false
+
+  children:
+    mylab:
+      hosts:
+        myhostname:
+          ansible_host: "myhostname.{{ domain }}"
+
+          # ── fail2ban ──────────────────────────────────────────────────────
+          # fail2ban_state: configure
+          # fail2ban_abuseipdb_enabled: false
+          # fail2ban_jail_profile: ispconfig   # see roles/fail2ban_config/vars/
+
+          # ── gitea ─────────────────────────────────────────────────────────
+          # gitea_state: present
+          # gitea_http_domain: "gitea.{{ domain }}"
+          # gitea_http_port: 3010
+          # gitea_http_addr: "127.0.0.1"
+          # gitea_protocol: "http"
+          # gitea_root_url: "{{ gitea_protocol }}://{{ gitea_http_domain }}/"
+          # gitea_db_type: "mysql"
+          # gitea_db_host: "localhost:3306"
+          # gitea_db_name: "gitea"
+          # gitea_db_user: "gitea"
+          # gitea_db_password: "{{ lookup('env', 'GITEA_DB_PASSWORD') }}"
+          # gitea_home_path: "/home/git"
+          # gitea_data_path: "/var/lib/gitea/data"
+          # gitea_config_path: "/etc/gitea"
+          # gitea_log_path: "/var/log/gitea"
+          # gitea_app_ini_path: "/etc/gitea/app.ini"
+
+          # ── mariadb ───────────────────────────────────────────────────────
+          # mariadb_state: present
+
+          # ── wireguard ─────────────────────────────────────────────────────
+          # wireguard_state: present
+          # wireguard_svr_public_key: "{{ lookup('env', 'WG_PUBKEY') }}"
+          # wireguard_cluster_preshared_key: "{{ lookup('env', 'WG_SHAREDKEY') }}"
+          # wireguard_server_endpoint: "{{ lookup('env', 'WG_SERVER') }}"
+
+          # ── sshd_harden ───────────────────────────────────────────────────
+          # (no state var — apply directly)
+
+          # ── mail_agent ────────────────────────────────────────────────────
+          # mail_agent_state: present
+          # mail_agent_ssh_public_key: "{{ lookup('env', 'MAIL_AGENT_SSH_PUBKEY') }}"
+          # mail_agent_ssh_source: ""   # optional, leave empty for key-only
+
+          # ── ispconfig_backup ──────────────────────────────────────────────
+          # ispconfig_backup_state: present
+
+          # ── alert_notifier ────────────────────────────────────────────────
+          # alert_notifier_state: present

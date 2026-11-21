@@ -1,0 +1,10 @@
+---
+# group_vars/all.yml — global defaults for solti-ensemble
+# Copy to group_vars/all.yml and adjust, or set per-host in inventory/hosts/*.yml
+
+domain: example.com
+mylab_nolog: "{{ cluster_secure_log | bool | default(true) }}"
+mylab_non_ssh: false
+
+ansible_user: youruser
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
