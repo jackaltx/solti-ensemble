@@ -21,7 +21,13 @@
         tasks_from: verify
       when: ansible_os_family == "RedHat"
 
-    - name: Skip notice for non-RHEL platforms
+    - name: Skip podman notice for non-RHEL platforms
       ansible.builtin.debug:
         msg: "{{ inventory_hostname }}: podman role not tested on {{ ansible_os_family }} (use Docker role for Debian/Ubuntu)"
       when: ansible_os_family != "RedHat"
+
+    # MariaDB verification — all platforms
+    - name: Run mariadb verify (all platforms)
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/mariadb"
+        tasks_from: verify

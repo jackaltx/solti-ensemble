@@ -5,6 +5,9 @@
 
   vars:
     podman_state: present
+    mariadb_state: present
+    mysql_password: ""
+    mariadb_security: false
 
   tasks:
     - name: Load shared test configuration
@@ -23,3 +26,7 @@
       ansible.builtin.include_role:
         name: "{{ project_root }}/roles/podman"
       when: ansible_os_family == "RedHat"
+
+    - name: Run mariadb role (all platforms)
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/mariadb"

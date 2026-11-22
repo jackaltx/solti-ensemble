@@ -1,5 +1,5 @@
 ---
 mariadb_packages:
   - mariadb-server
-  - mariadb-client
+  - mariadb
   - python3-PyMySQL
