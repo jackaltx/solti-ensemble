@@ -1,29 +1,54 @@
 ---
 # tasks file for nfs-client
 
-- name: NFS client block
-  when: mount_nfs_share
+- name: Install NFS client and mount shares
+  when: nfs_client_state == 'present'
   become: true
   block:
-    - name: Install NFS client packages
-      when: ansible_facts['os_family'] == "Debian"
+    - name: Install NFS client packages (Debian/Ubuntu)
       ansible.builtin.apt:
+        name: nfs-common
+        state: present
         update_cache: true
-        pkg:
-          - nfs-common
+      when: ansible_facts['os_family'] == 'Debian'
 
-    - name: Install the latest version of NFS clients
-      when: ansible_facts['os_family'] == "RedHat"
+    - name: Install NFS client packages (RedHat/Fedora)
       ansible.builtin.dnf:
         name: nfs-utils
-        state: latest
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
 
-    - name: Mount an NFS volume
+    - name: Ensure mount point directories exist
+      ansible.builtin.file:
+        path: "{{ item.value.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ nfs_client_mounts | dict2items }}"
+
+    - name: Mount NFS shares
       ansible.posix.mount:
         src: "{{ item.value.src }}"
         path: "{{ item.value.path }}"
         opts: "{{ item.value.opts }}"
-        state: "{{ item.value.state }}"
-        fstype: "{{ item.value.fstype }}"
-      # loop: "{{ lookup('dict', cluster_nfs_mounts) }}"
-      loop: "{{ cluster_nfs_mounts | dict2items }}"
+        fstype: "{{ item.value.fstype | default('nfs4') }}"
+        state: "{{ item.value.state | default('mounted') }}"
+      loop: "{{ nfs_client_mounts | dict2items }}"
+
+- name: Unmount and remove NFS shares
+  when: nfs_client_state == 'absent'
+  become: true
+  block:
+    - name: Unmount and remove NFS shares from fstab
+      ansible.posix.mount:
+        path: "{{ item.value.path }}"
+        state: absent
+      loop: "{{ nfs_client_mounts | dict2items }}"
+
+    - name: Remove mount point directories
+      ansible.builtin.file:
+        path: "{{ item.value.path }}"
+        state: absent
+      loop: "{{ nfs_client_mounts | dict2items }}"
+      when: item.value.remove_dir | default(false)

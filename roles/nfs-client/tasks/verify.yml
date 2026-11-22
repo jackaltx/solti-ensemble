@@ -1,0 +1,12 @@
+---
+- name: Discover verify levels
+  ansible.builtin.find:
+    paths: "{{ role_path }}/tasks"
+    patterns: "verify_[0-9]*.yml"
+  register: _verify_levels
+  delegate_to: localhost
+  run_once: true
+
+- name: Run verify levels in sequence
+  ansible.builtin.include_tasks: "{{ item }}"
+  loop: "{{ _verify_levels.files | map(attribute='path') | sort | list }}"

@@ -121,8 +121,7 @@ target_hosts() {
 
 generate_state_playbook() {
     local hosts; hosts=$(target_hosts)
-    local feature_var; feature_var="${FEATURE/_/-}"
-    local svar="${FEATURE}_state"
+    local svar="${FEATURE//-/_}_state"
 
     TEMP_PLAYBOOK=$(mktemp "${TEMP_DIR}/manage-feature-XXXXXX.yml")
     cat > "$TEMP_PLAYBOOK" <<EOF

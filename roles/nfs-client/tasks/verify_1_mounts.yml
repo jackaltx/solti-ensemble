@@ -1,0 +1,44 @@
+---
+# Level 1: each configured mount is actually mounted and the path is readable
+
+- name: Check each NFS mount is active
+  ansible.builtin.command: findmnt --noheadings --target {{ item.value.path }}
+  changed_when: false
+  register: _findmnt
+  loop: "{{ nfs_client_mounts | dict2items }}"
+  ignore_errors: true
+
+- name: Check NFS server responds via df (works through root_squash)
+  ansible.builtin.command: df {{ item.value.path }}
+  changed_when: false
+  register: _df
+  loop: "{{ nfs_client_mounts | dict2items }}"
+  ignore_errors: true
+
+- name: Show mount check results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.key }} ({{ item.item.value.path }}):
+      mounted={{ 'pass' if item.rc == 0 else 'FAIL' }}
+  loop: "{{ _findmnt.results }}"
+
+- name: Show server response check results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.key }} ({{ item.item.value.path }}):
+      server responds={{ 'pass' if item.rc == 0 else 'FAIL' }}
+  loop: "{{ _df.results }}"
+
+- name: Assert all mounts are active
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "{{ item.item.key }} is not mounted at {{ item.item.value.path }}"
+    success_msg: "{{ item.item.key }} mounted at {{ item.item.value.path }}"
+  loop: "{{ _findmnt.results }}"
+
+- name: Assert NFS server responds for all mounts
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "{{ item.item.key }} at {{ item.item.value.path }} — NFS server not responding"
+    success_msg: "{{ item.item.key }} server responds"
+  loop: "{{ _df.results }}"

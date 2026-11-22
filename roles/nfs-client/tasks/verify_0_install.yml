@@ -1,0 +1,36 @@
+---
+# Level 0: NFS client package is installed and rpcbind/nfs services are up
+
+- name: Check nfs-common is installed (Debian/Ubuntu)
+  ansible.builtin.command: dpkg -s nfs-common
+  changed_when: false
+  register: _pkg_deb
+  ignore_errors: true
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Check nfs-utils is installed (RedHat/Fedora)
+  ansible.builtin.command: rpm -q nfs-utils
+  changed_when: false
+  register: _pkg_rh
+  ignore_errors: true
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Check mount binary is present
+  ansible.builtin.command: which mount.nfs4
+  changed_when: false
+  register: _mount_bin
+  ignore_errors: true
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "nfs package:   {{ 'pass' if (_pkg_deb.rc | default(_pkg_rh.rc | default(1))) == 0 else 'FAIL' }}"
+      - "mount.nfs4:    {{ 'pass' if _mount_bin.rc == 0 else 'FAIL' }}"
+
+- name: Assert NFS client is installed
+  ansible.builtin.assert:
+    that:
+      - (_pkg_deb.rc | default(_pkg_rh.rc | default(1))) == 0
+      - _mount_bin.rc == 0
+    fail_msg: "NFS client not installed — run present state first"
+    success_msg: "NFS client installed"

@@ -1,12 +1,24 @@
 ---
 # defaults file for nfs-client
 
-mount_nfs_share: false
+# present — install packages and mount all nfs_client_mounts entries
+# absent  — unmount all entries and remove from fstab
+nfs_client_state: present
 
-cluster_nfs_mounts:
-  none:
-    src: 127.0.0.1:/not-a-share
-    path: /mnt/not-a-mount
-    opts: rw,noatime,bg,rsize=131072,wsize=131072,hard,intr,timeo=150,retrans=3
-    state: ephemeral
-    fstype: nfs4
+# Dict of mounts. Each entry:
+#   src:    NFS server export path (e.g. 192.168.40.14:/Multimedia)
+#   path:   local mount point (created if absent)
+#   opts:   mount options
+#   fstype: nfs or nfs4
+#   state:  mounted (default, persists in fstab) | ephemeral (no fstab)
+#
+# Example:
+#   multimedia:
+#     src: 192.168.40.14:/Multimedia
+#     path: /mnt/multimedia
+#     opts: ro,noatime,bg,rsize=131072,wsize=131072,hard,timeo=150,retrans=3
+#     fstype: nfs4
+#     state: mounted
+nfs_client_mounts: {}
+
+nfs_client_no_log: "{{ mylab_nolog | default(true) }}"
