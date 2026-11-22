@@ -3,8 +3,8 @@ set -euo pipefail
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 die() { echo "denied: $*" >&2; exit 2; }
-[[ $# -eq 2 ]] || die "usage: mail-agent-op <action> <queue-id|user@domain|line-count>"
-action=$1 arg=$2
+[[ $# -ge 1 && $# -le 2 ]] || die "usage: mail-agent-op <action> [queue-id|user@domain|line-count]"
+action=$1 arg="${2:-}"
 
 # The 6-character minimum also blocks the special queue ID "ALL"
 qid()   { [[ $arg =~ ^[0-9A-Za-z]{6,20}$ ]] || die "bad queue id"; }
@@ -31,5 +31,6 @@ case $action in
   audit)     lines;
              /usr/bin/journalctl --no-pager -n "$arg" _COMM=sudo | grep "{{ mail_agent_user }}"
              exit $? ;;
+  queue)     exec /usr/sbin/postqueue -p ;;
   *)         die "unknown action" ;;
 esac
