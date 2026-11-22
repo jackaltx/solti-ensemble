@@ -1,0 +1,20 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Show platform info
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} | {{ ansible_distribution }} {{ ansible_distribution_version }} | {{ ansible_os_family }}"
+
+    - name: Run podman verify
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/podman"
+        tasks_from: verify

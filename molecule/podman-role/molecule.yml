@@ -1,0 +1,64 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+    ignore-errors: true
+
+driver:
+  name: podman
+  options:
+    managed: true
+
+platforms:
+  - name: "uut-rocky9"
+    image: "gitea.{{ domain }}/jackaltx/testing-containers/rocky-ssh:9"
+    network: "ensemble-net"
+    command: "/sbin/init"
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    extra_opts:
+      - "--cgroupns=host"
+    security_opts:
+      - label=disable
+    published_ports:
+      - "2224:22"
+    pre_build_image: true
+
+provisioner:
+  name: ansible
+  log: true
+  env:
+    ANSIBLE_SSH_ARGS: "-o IdentityFile=~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ANSIBLE_DEPRECATION_WARNINGS: "False"
+  config_options:
+    defaults:
+      roles_path: roles
+      interpreter_python: auto_silent
+      host_key_checking: false
+      ansible_managed: "Ansible managed"
+  playbooks:
+    create: "../shared/podman/create.yml"
+    prepare: "../shared/podman/prepare.yml"
+    converge: "converge.yml"
+    verify: "verify.yml"
+    destroy: "../shared/podman/destroy.yml"
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: ssh
+        ansible_user: "jackaltx"
+
+scenario:
+  name: podman-role
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

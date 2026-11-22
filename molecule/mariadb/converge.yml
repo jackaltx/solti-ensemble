@@ -1,0 +1,18 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+
+  vars:
+    mariadb_state: present
+    mysql_password: ""
+    mariadb_security: false
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+
+    - name: Run mariadb role
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/mariadb"
