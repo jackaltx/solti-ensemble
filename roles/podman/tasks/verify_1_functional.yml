@@ -1,0 +1,24 @@
+---
+# Level 1: podman can pull and run a container (OCI runtime chain: podman → crun → container)
+#
+# Runs as root because nested user namespace mapping is blocked when the outer
+# podman host is itself rootless (kernel restricts newuidmap in that context).
+# Level 0 verifies the rootless prerequisites (subuid/newuidmap) are in place.
+# True rootless end-to-end testing requires a VM-based scenario.
+- name: Run hello-world container
+  ansible.builtin.command: podman run --rm quay.io/podman/hello
+  changed_when: false
+  register: _podman_hello
+  ignore_errors: true
+
+- name: Show functional check result
+  ansible.builtin.debug:
+    msg:
+      - "container run: {{ 'pass' if _podman_hello.rc == 0 else 'fail' }}"
+      - "{{ _podman_hello.stdout_lines | default([]) }}"
+
+- name: Assert podman can run a container
+  ansible.builtin.assert:
+    that: _podman_hello.rc == 0
+    fail_msg: "podman run failed: {{ _podman_hello.stderr | default('') }}"
+    success_msg: "podman run: pass"

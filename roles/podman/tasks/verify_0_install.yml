@@ -1,0 +1,56 @@
+---
+# Level 0: podman is installed and the daemon/info responds
+- name: Check podman binary
+  ansible.builtin.command: which podman
+  changed_when: false
+  register: _podman_bin
+  ignore_errors: true
+
+- name: Get podman version
+  ansible.builtin.command: podman --version
+  changed_when: false
+  register: _podman_version
+  ignore_errors: true
+
+- name: Check podman info
+  ansible.builtin.command: podman info
+  changed_when: false
+  register: _podman_info
+  ignore_errors: true
+
+- name: Check crun binary
+  ansible.builtin.command: which crun
+  changed_when: false
+  register: _crun_bin
+  ignore_errors: true
+
+- name: Check registries.conf.d directory
+  ansible.builtin.stat:
+    path: /etc/containers/registries.conf.d
+  register: _registries
+
+- name: Verify subuid entry for provisioner user
+  ansible.builtin.command: grep jackaltx /etc/subuid
+  changed_when: false
+  register: _subuid
+  ignore_errors: true
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "podman binary:     {{ 'pass' if _podman_bin.rc == 0 else 'fail' }}"
+      - "podman version:    {{ _podman_version.stdout | default('unknown') }}"
+      - "podman info:       {{ 'pass' if _podman_info.rc == 0 else 'fail' }}"
+      - "crun binary:       {{ 'pass' if _crun_bin.rc == 0 else 'fail' }}"
+      - "registries.conf.d: {{ 'pass' if _registries.stat.exists else 'fail' }}"
+      - "subuid entry:      {{ 'pass' if _subuid.rc == 0 else 'fail' }}"
+
+- name: Assert install checks passed
+  ansible.builtin.assert:
+    that:
+      - _podman_bin.rc == 0
+      - _podman_info.rc == 0
+      - _crun_bin.rc == 0
+      - _registries.stat.exists
+    fail_msg: "Podman install check failed"
+    success_msg: "Podman installed: {{ _podman_version.stdout }}"

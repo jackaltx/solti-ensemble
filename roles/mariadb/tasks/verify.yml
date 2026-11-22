@@ -1,77 +1,15 @@
 ---
-# Operational verification for the mariadb role.
-#
-# Facts set:
-#   mariadb_verify_failed   - true if any check failed
-#   mariadb_verify_results  - dict of check name → pass/fail
-#
-- name: Verify mariadb installation
-  block:
-    - name: Check mariadb service is active
-      ansible.builtin.command: systemctl is-active mariadb
-      changed_when: false
-      register: mariadb_service_check
-      ignore_errors: true
+# Entry point for mariadb verification. Discovers and runs verify_N_*.yml
+# files in this directory in numeric order. Add a new level by dropping
+# a verify_N_description.yml file here — no edits required.
+- name: Discover verify levels
+  ansible.builtin.find:
+    paths: "{{ role_path }}/tasks"
+    patterns: "verify_[0-9]*.yml"
+  register: _verify_levels
+  delegate_to: localhost
+  run_once: true
 
-    - name: Check mysql binary
-      ansible.builtin.command: which mysql
-      changed_when: false
-      register: mariadb_bin_check
-      ignore_errors: true
-
-    - name: Get MariaDB version
-      ansible.builtin.command: mysql --version
-      changed_when: false
-      register: mariadb_version_check
-      ignore_errors: true
-
-    - name: Check port 3306 is listening
-      ansible.builtin.command: ss -tlnp
-      changed_when: false
-      register: mariadb_port_check
-      ignore_errors: true
-
-    - name: Test database connectivity (root, no password)
-      ansible.builtin.command: mysql -u root -e "SELECT 1"
-      changed_when: false
-      register: mariadb_connect_check
-      ignore_errors: true
-
-    - name: Check python3-PyMySQL is importable
-      ansible.builtin.command: python3 -c "import pymysql; print(pymysql.__version__)"
-      changed_when: false
-      register: mariadb_pymysql_check
-      ignore_errors: true
-
-    - name: Collect results
-      ansible.builtin.set_fact:
-        mariadb_verify_results:
-          service_active: "{{ 'pass' if mariadb_service_check.rc == 0 else 'fail' }}"
-          mysql_binary: "{{ 'pass' if mariadb_bin_check.rc == 0 else 'fail' }}"
-          mariadb_version: "{{ mariadb_version_check.stdout | default('unknown') }}"
-          port_3306: "{{ 'pass' if ':3306' in mariadb_port_check.stdout else 'fail' }}"
-          db_connect: "{{ 'pass' if mariadb_connect_check.rc == 0 else 'fail' }}"
-          pymysql: "{{ 'pass' if mariadb_pymysql_check.rc == 0 else 'fail' }}"
-        mariadb_verify_failed: >-
-          {{
-            mariadb_service_check.rc != 0 or
-            mariadb_bin_check.rc != 0 or
-            ':3306' not in mariadb_port_check.stdout or
-            mariadb_connect_check.rc != 0
-          }}
-
-    - name: Show verify results
-      ansible.builtin.debug:
-        msg:
-          - "service active:  {{ mariadb_verify_results.service_active }}"
-          - "mysql binary:    {{ mariadb_verify_results.mysql_binary }}"
-          - "mariadb version: {{ mariadb_verify_results.mariadb_version }}"
-          - "port 3306:       {{ mariadb_verify_results.port_3306 }}"
-          - "db connect:      {{ mariadb_verify_results.db_connect }}"
-          - "pymysql:         {{ mariadb_verify_results.pymysql }}"
-
-    - name: Assert all checks passed
-      ansible.builtin.assert:
-        that: not mariadb_verify_failed
-        fail_msg: "MariaDB verification failed: {{ mariadb_verify_results | to_json }}"
-        success_msg: "MariaDB verified: {{ mariadb_verify_results.mariadb_version }}"
+- name: Run verify levels in sequence
+  ansible.builtin.include_tasks: "{{ item }}"
+  loop: "{{ _verify_levels.files | map(attribute='path') | sort | list }}"

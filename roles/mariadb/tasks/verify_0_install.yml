@@ -1,0 +1,49 @@
+---
+# Level 0: mariadb is installed, service is running, port is open
+- name: Check mariadb service is active
+  ansible.builtin.command: systemctl is-active mariadb
+  changed_when: false
+  register: _service
+  ignore_errors: true
+
+- name: Check mysql binary
+  ansible.builtin.command: which mysql
+  changed_when: false
+  register: _bin
+  ignore_errors: true
+
+- name: Get MariaDB version
+  ansible.builtin.command: mysql --version
+  changed_when: false
+  register: _version
+  ignore_errors: true
+
+- name: Check port 3306 is listening
+  ansible.builtin.command: ss -tlnp
+  changed_when: false
+  register: _port
+  ignore_errors: true
+
+- name: Check python3-PyMySQL is importable
+  ansible.builtin.command: python3 -c "import pymysql; print(pymysql.__version__)"
+  changed_when: false
+  register: _pymysql
+  ignore_errors: true
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "service active: {{ 'pass' if _service.rc == 0 else 'fail' }}"
+      - "mysql binary:   {{ 'pass' if _bin.rc == 0 else 'fail' }}"
+      - "version:        {{ _version.stdout | default('unknown') }}"
+      - "port 3306:      {{ 'pass' if ':3306' in _port.stdout else 'fail' }}"
+      - "pymysql:        {{ 'pass' if _pymysql.rc == 0 else 'fail' }}"
+
+- name: Assert install checks passed
+  ansible.builtin.assert:
+    that:
+      - _service.rc == 0
+      - _bin.rc == 0
+      - "':3306' in _port.stdout"
+    fail_msg: "MariaDB install check failed"
+    success_msg: "MariaDB installed: {{ _version.stdout }}"

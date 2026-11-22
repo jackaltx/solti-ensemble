@@ -1,0 +1,51 @@
+---
+# Level 1: mariadb accepts connections and can execute queries
+- name: Test root login (no password)
+  ansible.builtin.command: mysql -u root -e "SELECT 1"
+  changed_when: false
+  register: _connect
+  ignore_errors: true
+
+- name: Create test database
+  ansible.builtin.command: mysql -u root -e "CREATE DATABASE IF NOT EXISTS _molecule_test"
+  changed_when: false
+  register: _create_db
+  ignore_errors: true
+
+- name: Create table and insert row
+  ansible.builtin.command: >
+    mysql -u root _molecule_test -e
+    "CREATE TABLE IF NOT EXISTS t (id INT); INSERT INTO t VALUES (42)"
+  changed_when: false
+  register: _insert
+  ignore_errors: true
+
+- name: Read row back
+  ansible.builtin.command: mysql -u root _molecule_test -e "SELECT id FROM t WHERE id=42"
+  changed_when: false
+  register: _select
+  ignore_errors: true
+
+- name: Drop test database
+  ansible.builtin.command: mysql -u root -e "DROP DATABASE _molecule_test"
+  changed_when: false
+  ignore_errors: true
+
+- name: Show functional check results
+  ansible.builtin.debug:
+    msg:
+      - "connect:    {{ 'pass' if _connect.rc == 0 else 'fail' }}"
+      - "create db:  {{ 'pass' if _create_db.rc == 0 else 'fail' }}"
+      - "insert:     {{ 'pass' if _insert.rc == 0 else 'fail' }}"
+      - "select:     {{ 'pass' if _select.rc == 0 and '42' in _select.stdout else 'fail' }}"
+
+- name: Assert functional checks passed
+  ansible.builtin.assert:
+    that:
+      - _connect.rc == 0
+      - _create_db.rc == 0
+      - _insert.rc == 0
+      - _select.rc == 0
+      - "'42' in _select.stdout"
+    fail_msg: "MariaDB functional check failed"
+    success_msg: "MariaDB functional: pass"
