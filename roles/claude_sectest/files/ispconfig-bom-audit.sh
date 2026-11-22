@@ -240,9 +240,9 @@ generate_migration_script() {
 -- ==============================================
 -- WEB DOMAINS - All domains and their configs
 -- ==============================================
-SELECT 'WEB_DOMAINS' as section, domain, active, type, 
+SELECT 'WEB_DOMAINS' as section, domain, active, `type`,
        CASE WHEN parent_domain_id = 0 THEN 'MAIN' ELSE 'CHILD' END as domain_type,
-       ssl, ssl_letsencrypt, php,
+       `ssl`, ssl_letsencrypt, php,
        CASE WHEN apache_directives IS NOT NULL AND apache_directives != '' THEN 'YES' ELSE 'NO' END as has_apache_directives,
        CASE WHEN nginx_directives IS NOT NULL AND nginx_directives != '' THEN 'YES' ELSE 'NO' END as has_nginx_directives,
        CASE WHEN custom_php_ini IS NOT NULL AND custom_php_ini != '' THEN 'YES' ELSE 'NO' END as has_custom_php,
@@ -265,7 +265,7 @@ ORDER BY domain;
 -- ==============================================
 -- MAIL USERS - All email accounts
 -- ==============================================
-SELECT 'MAIL_USERS' as section, email, access as active, quota,
+SELECT 'MAIL_USERS' as section, email, `access` as active, quota,
        CASE WHEN cc IS NOT NULL AND cc != '' THEN 'YES' ELSE 'NO' END as has_forwarding,
        CASE WHEN autoresponder = 'y' THEN 'YES' ELSE 'NO' END as has_autoresponder,
        c.company_name as client
@@ -307,7 +307,7 @@ SELECT 'SUMMARY' as section, 'Web Domains Total' as item, COUNT(*) as count FROM
 UNION ALL
 SELECT 'SUMMARY', 'Web Domains Active', COUNT(*) FROM web_domain WHERE active='y'
 UNION ALL
-SELECT 'SUMMARY', 'Web Domains with SSL', COUNT(*) FROM web_domain WHERE ssl='y'
+SELECT 'SUMMARY', 'Web Domains with SSL', COUNT(*) FROM web_domain WHERE `ssl`='y'
 UNION ALL
 SELECT 'SUMMARY', 'Web Domains with Custom Directives', COUNT(*) FROM web_domain 
 WHERE (apache_directives IS NOT NULL AND apache_directives != '') 
@@ -319,7 +319,7 @@ SELECT 'SUMMARY', 'Mail Domains Active', COUNT(*) FROM mail_domain WHERE active=
 UNION ALL
 SELECT 'SUMMARY', 'Mail Users Total', COUNT(*) FROM mail_user
 UNION ALL
-SELECT 'SUMMARY', 'Mail Users Active', COUNT(*) FROM mail_user WHERE access='y'
+SELECT 'SUMMARY', 'Mail Users Active', COUNT(*) FROM mail_user WHERE `access`='y'
 UNION ALL
 SELECT 'SUMMARY', 'DNS Zones Total', COUNT(*) FROM dns_soa
 UNION ALL
