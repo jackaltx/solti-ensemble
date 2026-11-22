@@ -265,13 +265,13 @@ ORDER BY domain;
 -- ==============================================
 -- MAIL USERS - All email accounts
 -- ==============================================
-SELECT 'MAIL_USERS' as section, email, `access` as active, quota,
+SELECT 'MAIL_USERS' as section, mu.email, `access` as active, quota,
        CASE WHEN cc IS NOT NULL AND cc != '' THEN 'YES' ELSE 'NO' END as has_forwarding,
        CASE WHEN autoresponder = 'y' THEN 'YES' ELSE 'NO' END as has_autoresponder,
        c.company_name as client
 FROM mail_user mu
 LEFT JOIN client c ON mu.sys_groupid = c.sys_groupid
-ORDER BY email;
+ORDER BY mu.email;
 
 -- ==============================================
 -- DNS ZONES - All DNS zones
