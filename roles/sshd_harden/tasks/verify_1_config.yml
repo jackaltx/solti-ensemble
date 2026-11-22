@@ -1,0 +1,52 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 1: effective sshd config contains the expected hardening values.
+# Uses `sshd -T` (dump effective config) so we test what sshd actually sees,
+# not just what's in the file.
+#
+# Note: some settings only appear in `sshd -T` output after a restart.
+# If the advisory from main.yml said a restart is pending, these checks
+# reflect the CURRENT running config, not the new one.
+
+- name: Dump effective sshd configuration
+  ansible.builtin.command: /usr/sbin/sshd -T
+  changed_when: false
+  register: _effective_config
+
+- name: Check key hardening settings in effective config
+  ansible.builtin.set_fact:
+    _checks:
+      x11forwarding_no:       "{{ 'x11forwarding no' in _effective_config.stdout | lower }}"
+      permitrootlogin_safe:   "{{ 'permitrootlogin prohibit-password' in _effective_config.stdout | lower }}"
+      permitemptypasswords_no: "{{ 'permitemptypasswords no' in _effective_config.stdout | lower }}"
+      maxauthtries_low:       "{{ 'maxauthtries 3' in _effective_config.stdout | lower }}"
+      allowtcpforwarding_no:  "{{ 'allowtcpforwarding no' in _effective_config.stdout | lower }}"
+      chacha_cipher_present:  "{{ 'chacha20-poly1305@openssh.com' in _effective_config.stdout }}"
+      etm_mac_present:        "{{ 'hmac-sha2-256-etm@openssh.com' in _effective_config.stdout }}"
+
+- name: Show config check results
+  ansible.builtin.debug:
+    msg:
+      - "x11forwarding no:          {{ 'pass' if _checks.x11forwarding_no else 'FAIL' }}"
+      - "permitrootlogin safe:      {{ 'pass' if _checks.permitrootlogin_safe else 'FAIL' }}"
+      - "permitemptypasswords no:   {{ 'pass' if _checks.permitemptypasswords_no else 'FAIL' }}"
+      - "maxauthtries 3:            {{ 'pass' if _checks.maxauthtries_low else 'FAIL' }}"
+      - "allowtcpforwarding no:     {{ 'pass' if _checks.allowtcpforwarding_no else 'FAIL' }}"
+      - "chacha20 cipher present:   {{ 'pass' if _checks.chacha_cipher_present else 'FAIL' }}"
+      - "etm MAC present:           {{ 'pass' if _checks.etm_mac_present else 'FAIL' }}"
+
+- name: Assert config checks passed
+  ansible.builtin.assert:
+    that:
+      - _checks.x11forwarding_no
+      - _checks.permitrootlogin_safe
+      - _checks.permitemptypasswords_no
+      - _checks.maxauthtries_low
+      - _checks.allowtcpforwarding_no
+      - _checks.chacha_cipher_present
+      - _checks.etm_mac_present
+    fail_msg: >-
+      Effective sshd config does not match hardening expectations.
+      If a restart is pending (main.yml reported one), run apply_restart.yml
+      then re-verify.
+    success_msg: "sshd hardening config: all checks passed"

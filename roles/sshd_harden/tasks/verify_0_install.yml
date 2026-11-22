@@ -1,0 +1,44 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 0: sshd is present, running, config drop-in is deployed, syntax is valid
+
+- name: Check sshd binary
+  ansible.builtin.command: which sshd
+  changed_when: false
+  register: _bin
+  ignore_errors: true
+
+- name: Check sshd service is active
+  ansible.builtin.command: systemctl is-active {{ sshd_harden_service_name }}
+  changed_when: false
+  register: _service
+  ignore_errors: true
+
+- name: Check hardening config file exists
+  ansible.builtin.stat:
+    path: "{{ sshd_harden_config_file }}"
+  register: _config_file
+
+- name: Validate sshd config syntax
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  register: _syntax
+  ignore_errors: true
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "sshd binary:    {{ 'pass' if _bin.rc == 0 else 'FAIL' }}"
+      - "service active: {{ 'pass' if _service.stdout == 'active' else 'FAIL (' + _service.stdout | default('unknown') + ')' }}"
+      - "config file:    {{ 'pass' if _config_file.stat.exists else 'FAIL (not deployed — run main.yml first)' }}"
+      - "syntax check:   {{ 'pass' if _syntax.rc == 0 else 'FAIL' }}"
+
+- name: Assert install checks passed
+  ansible.builtin.assert:
+    that:
+      - _bin.rc == 0
+      - _service.stdout == 'active'
+      - _config_file.stat.exists
+      - _syntax.rc == 0
+    fail_msg: "sshd_harden install check failed — see debug output above"
+    success_msg: "sshd installed, running, config deployed, syntax valid"

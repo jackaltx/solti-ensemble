@@ -1,0 +1,45 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Deliberate second step: restart sshd to activate the hardened config.
+#
+# Run this ONLY after verifying that your SSH client can connect with the
+# new settings (key type, ciphers, MACs). Call via:
+#   tasks_from: apply_restart
+#
+# On a live remote host, the restart will briefly drop the Ansible connection.
+# The wait_for_connection task re-establishes it before continuing.
+
+- name: Check sshd config is present before restarting
+  ansible.builtin.stat:
+    path: "{{ sshd_harden_config_file }}"
+  register: _config_present
+
+- name: Abort if hardening config is not deployed
+  ansible.builtin.fail:
+    msg: >-
+      Hardening config not found at {{ sshd_harden_config_file }}.
+      Run main.yml (present state) first to deploy the config.
+  when: not _config_present.stat.exists
+
+- name: Validate config one more time before restarting
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Restart sshd
+  ansible.builtin.systemd:
+    name: "{{ sshd_harden_service_name }}"
+    state: restarted
+
+- name: Wait for sshd to come back
+  ansible.builtin.wait_for_connection:
+    delay: 3
+    timeout: 30
+
+- name: Confirm sshd is active after restart
+  ansible.builtin.command: systemctl is-active {{ sshd_harden_service_name }}
+  changed_when: false
+  register: _post_restart
+
+- name: Show restart result
+  ansible.builtin.debug:
+    msg: "sshd restarted successfully on {{ inventory_hostname }} — service is {{ _post_restart.stdout }}."

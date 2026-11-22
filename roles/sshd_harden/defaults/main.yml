@@ -1,3 +1,21 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # defaults file for sshd_harden
+
+sshd_harden_state: present
+
+# Service name varies by distro (sshd on RHEL, ssh on Debian/Ubuntu)
+sshd_harden_service_name: "{{ 'sshd' if ansible_facts['os_family'] == 'RedHat' else 'ssh' }}"
+
+# Config drop-in path and filename
+sshd_harden_config_dir: /etc/ssh/sshd_config.d
+sshd_harden_config_file: "{{ sshd_harden_config_dir }}/01-solti.conf"
+
+# Minimum DH moduli bit size to keep
+sshd_harden_moduli_min_bits: 3071
+
+# When true, suppress the restart-pending advisory (useful when caller
+# handles the restart themselves via apply_restart.yml)
+sshd_harden_skip_restart_advisory: false
+
+sshd_harden_no_log: "{{ mylab_nolog | default(true) }}"
