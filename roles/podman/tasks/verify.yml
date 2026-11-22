@@ -1,0 +1,76 @@
+---
+# Operational verification for the podman role.
+#
+# Facts set:
+#   podman_verify_failed  - true if any check failed
+#   podman_verify_results - dict of check name → pass/fail
+#
+- name: Verify podman installation
+  block:
+    - name: Check podman binary
+      ansible.builtin.command: which podman
+      changed_when: false
+      register: podman_bin_check
+      ignore_errors: true
+
+    - name: Get podman version
+      ansible.builtin.command: podman --version
+      changed_when: false
+      register: podman_version_check
+      ignore_errors: true
+
+    - name: Check podman info
+      ansible.builtin.command: podman info
+      changed_when: false
+      register: podman_info_check
+      ignore_errors: true
+
+    - name: Check crun binary
+      ansible.builtin.command: which crun
+      changed_when: false
+      register: crun_check
+      ignore_errors: true
+
+    - name: Check registries.conf.d directory
+      ansible.builtin.stat:
+        path: /etc/containers/registries.conf.d
+      register: registries_check
+
+    - name: Verify subuid entry for provisioner user
+      ansible.builtin.command: grep jackaltx /etc/subuid
+      changed_when: false
+      register: subuid_check
+      ignore_errors: true
+
+    - name: Collect results
+      ansible.builtin.set_fact:
+        podman_verify_results:
+          podman_binary: "{{ 'pass' if podman_bin_check.rc == 0 else 'fail' }}"
+          podman_version: "{{ podman_version_check.stdout | default('unknown') }}"
+          podman_info: "{{ 'pass' if podman_info_check.rc == 0 else 'fail' }}"
+          crun_binary: "{{ 'pass' if crun_check.rc == 0 else 'fail' }}"
+          registries_conf_d: "{{ 'pass' if registries_check.stat.exists else 'fail' }}"
+          subuid_entry: "{{ 'pass' if subuid_check.rc == 0 else 'fail' }}"
+        podman_verify_failed: >-
+          {{
+            podman_bin_check.rc != 0 or
+            podman_info_check.rc != 0 or
+            crun_check.rc != 0 or
+            not registries_check.stat.exists
+          }}
+
+    - name: Show verify results
+      ansible.builtin.debug:
+        msg:
+          - "podman binary:     {{ podman_verify_results.podman_binary }}"
+          - "podman version:    {{ podman_verify_results.podman_version }}"
+          - "podman info:       {{ podman_verify_results.podman_info }}"
+          - "crun binary:       {{ podman_verify_results.crun_binary }}"
+          - "registries.conf.d: {{ podman_verify_results.registries_conf_d }}"
+          - "subuid entry:      {{ podman_verify_results.subuid_entry }}"
+
+    - name: Assert all checks passed
+      ansible.builtin.assert:
+        that: not podman_verify_failed
+        fail_msg: "Podman verification failed: {{ podman_verify_results | to_json }}"
+        success_msg: "Podman verified: {{ podman_verify_results.podman_version }}"
