@@ -1,0 +1,92 @@
+---
+- name: Install Docker CE
+  when: docker_state == 'present'
+  block:
+    - name: Fail on unsupported OS
+      ansible.builtin.fail:
+        msg: "docker role only supports Debian/Ubuntu (ansible_os_family = {{ ansible_os_family }})"
+      when: ansible_os_family != "Debian"
+
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker GPG key
+      ansible.builtin.shell: |
+        curl -fsSL https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg \
+          | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') }}
+          signed-by=/etc/apt/keyrings/docker.gpg]
+          https://download.docker.com/linux/{{ ansible_distribution | lower }}
+          {{ ansible_distribution_release }} {{ docker_channel }}
+        state: present
+        filename: docker
+        update_cache: true
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+
+    - name: Start and enable Docker service
+      ansible.builtin.service:
+        name: docker
+        state: "{{ docker_service_state }}"
+        enabled: "{{ docker_service_enabled }}"
+
+    - name: Add users to docker group
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: docker
+        append: true
+      loop: "{{ docker_users }}"
+
+- name: Remove Docker CE
+  when: docker_state == 'absent'
+  block:
+    - name: Stop Docker service
+      ansible.builtin.service:
+        name: docker
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Remove Docker packages
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: absent
+        purge: "{{ docker_remove_packages }}"
+
+    - name: Remove Docker data directory
+      ansible.builtin.file:
+        path: /var/lib/docker
+        state: absent
+      when: docker_remove_data
+
+    - name: Remove Docker repository and key
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/keyrings/docker.gpg
+      when: docker_remove_packages

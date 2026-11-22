@@ -1,0 +1,41 @@
+---
+# Level 0: Docker is installed, service is running, socket is present
+- name: Check docker service is active
+  ansible.builtin.command: systemctl is-active docker
+  changed_when: false
+  register: _service
+  ignore_errors: true
+
+- name: Check docker binary
+  ansible.builtin.command: which docker
+  changed_when: false
+  register: _bin
+  ignore_errors: true
+
+- name: Get Docker version
+  ansible.builtin.command: docker --version
+  changed_when: false
+  register: _version
+  ignore_errors: true
+
+- name: Check docker socket exists
+  ansible.builtin.stat:
+    path: /var/run/docker.sock
+  register: _socket
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "service active:  {{ 'pass' if _service.rc == 0 else 'fail' }}"
+      - "docker binary:   {{ 'pass' if _bin.rc == 0 else 'fail' }}"
+      - "version:         {{ _version.stdout | default('unknown') }}"
+      - "docker socket:   {{ 'pass' if _socket.stat.exists else 'fail' }}"
+
+- name: Assert install checks passed
+  ansible.builtin.assert:
+    that:
+      - _service.rc == 0
+      - _bin.rc == 0
+      - _socket.stat.exists
+    fail_msg: "Docker install check failed"
+    success_msg: "Docker installed: {{ _version.stdout }}"

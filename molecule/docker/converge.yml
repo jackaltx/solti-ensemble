@@ -1,0 +1,38 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+
+  vars:
+    docker_state: present
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+
+    - name: Run docker role
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/docker"
+
+    # Podman containers cannot nest overlayfs; vfs avoids the overlayfs-in-overlayfs failure.
+    # Podman containers have no systemd D-Bus; cgroupfs driver lets Docker manage cgroups directly.
+    - name: Configure Docker for Podman test environment (vfs + cgroupfs)
+      ansible.builtin.copy:
+        content: |
+          {
+            "storage-driver": "vfs",
+            "exec-opts": ["native.cgroupdriver=cgroupfs"]
+          }
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+      notify: restart docker
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+  handlers:
+    - name: restart docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted

@@ -1,0 +1,27 @@
+---
+# defaults file for docker
+
+docker_state: present
+
+# Docker CE edition and channel
+docker_edition: ce
+docker_channel: stable
+
+# Users to add to the docker group (empty = none)
+docker_users: []
+
+# Whether to start and enable the docker service
+docker_service_enabled: true
+docker_service_state: started
+
+# Packages to install (docker-compose-plugin requires Docker 20.10+)
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Cleanup options
+docker_remove_packages: false
+docker_remove_data: false

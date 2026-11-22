@@ -1,0 +1,32 @@
+---
+# Level 1: Docker daemon responds and reports a healthy state.
+#
+# docker run is NOT tested here: runc needs to create /sys/fs/cgroup/docker/ at
+# the cgroup root, which rootless Podman test containers cannot write to.
+# docker info is sufficient to prove the daemon is installed and functional.
+# Container execution is validated only in VM-based scenarios.
+- name: Check docker info (daemon functional)
+  ansible.builtin.command: docker info
+  changed_when: false
+  register: _info
+  ignore_errors: true
+
+- name: Check docker ps (client/daemon round-trip)
+  ansible.builtin.command: docker ps
+  changed_when: false
+  register: _ps
+  ignore_errors: true
+
+- name: Show functional check results
+  ansible.builtin.debug:
+    msg:
+      - "docker info:  {{ 'pass' if _info.rc == 0 else 'fail' }}"
+      - "docker ps:    {{ 'pass' if _ps.rc == 0 else 'fail' }}"
+
+- name: Assert functional checks passed
+  ansible.builtin.assert:
+    that:
+      - _info.rc == 0
+      - _ps.rc == 0
+    fail_msg: "Docker functional check failed"
+    success_msg: "Docker functional: pass"

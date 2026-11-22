@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: docker
+  author: jackaltx
+  description: Install Docker CE on Debian/Ubuntu hosts
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Debian
+      versions:
+        - "12"
+    - name: Ubuntu
+      versions:
+        - "24.04"
+
+dependencies: []
