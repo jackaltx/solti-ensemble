@@ -84,6 +84,7 @@ All arguments are validated before execution. The wrapper runs as root via sudo.
 | `logs` | line-count (1–9999) | `journalctl -n <n> -u 'postfix@*' -u dovecot` |
 | `audit` | line-count (1–9999) | sudo journal filtered to `mailagent` commands |
 | `queue` | *(none)* | `postqueue -p` — list full mail queue |
+| `users` | *(none)* | `doveadm user '*'` — list all virtual mail users |
 
 ---
 

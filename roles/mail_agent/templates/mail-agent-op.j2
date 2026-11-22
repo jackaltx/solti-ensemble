@@ -32,5 +32,6 @@ case $action in
              /usr/bin/journalctl --no-pager -n "$arg" _COMM=sudo | grep "{{ mail_agent_user }}"
              exit $? ;;
   queue)     exec /usr/sbin/postqueue -p ;;
+  users)     exec /usr/bin/doveadm user '*' ;;
   *)         die "unknown action" ;;
 esac
