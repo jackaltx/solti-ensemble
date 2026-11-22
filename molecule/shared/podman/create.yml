@@ -3,7 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    domain: "{{ lookup('env', 'LAB_TLD') | default('example.com', true) }}"
+    domain: "{{ lookup('env', 'LAB_TLD') | default('a0a0.org', true) }}"
     molecule_inventory:
       all:
         hosts: {}
@@ -21,7 +21,7 @@
 
     - name: Login to Gitea registry
       containers.podman.podman_login:
-        registry: "{{ lookup('env', 'GITEA_HOST') }}"
+        registry: "gitea.{{ domain }}"
         username: "{{ lookup('env', 'GITEA_USER') }}"
         password: "{{ lookup('env', 'GITEA_PASSWD') }}"
       no_log: "{{ secure_logging | default(true) }}"
@@ -35,10 +35,10 @@
         network: "{{ item.network }}"
         log_driver: json-file
         privileged: "{{ item.privileged | default(true) }}"
-        cgroupns: "{{ item.cgroupns_mode | default('host') }}"
+        cgroupns: host
         volumes: "{{ item.volumes | default([]) }}"
         command: "{{ item.command | default('/sbin/init') }}"
-        publish: "{{ ['%s:22' | format(item.ssh_port|string)] if item.ssh_port is defined else [] }}"
+        publish: "{{ item.published_ports | default([]) }}"
         security_opt:
           - label=disable
       register: result
@@ -56,16 +56,18 @@
 
     - name: Add container to molecule_inventory
       vars:
+        # SSH port is derived from published_ports[0] ("2223:22" → 2223)
+        ssh_port: "{{ item.published_ports[0].split(':')[0] | int if item.published_ports is defined and item.published_ports | length > 0 else omit }}"
         inventory_partial_yaml: |
           all:
             children:
               molecule:
                 hosts:
                   "{{ item.name }}":
-                    ansible_connection: "{{ 'ssh' if item.ssh_port is defined else 'containers.podman.podman' }}"
-                    ansible_host: "{{ '127.0.0.1' if item.ssh_port is defined else item.name }}"
-                    ansible_port: "{{ item.ssh_port | default(omit) }}"
-                    ansible_user: "{{ item.ssh_user | default(omit) }}"
+                    ansible_connection: ssh
+                    ansible_host: "127.0.0.1"
+                    ansible_port: {{ ssh_port }}
+                    ansible_user: jackaltx
       ansible.builtin.set_fact:
         molecule_inventory: >
           {{ molecule_inventory | combine(inventory_partial_yaml | from_yaml) }}
