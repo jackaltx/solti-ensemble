@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **jackaltx.solti_ensemble** Ansible collection - a comprehensive security-focused collection for infrastructure automation, security hardening, and development environment setup. The collection is part of the SOLTI (Systems Oriented Laboratory Testing & Integration) ecosystem and emphasizes defensive security practices.
+This is the **jackaltx.solti_ensemble** Ansible collection — a **functional service deployment collection** covering both security hardening and service installation. Part of the SOLTI ecosystem. Roles span three domains:
+
+- **Services**: `mariadb`, `mysql` (MySQL 8), `gitea`, `podman`, `docker` (planned), `ghost` (planned)
+- **Security**: `sshd_harden`, `fail2ban_config`, `claude_sectest`, `wireguard`
+- **Platform utilities**: `ispconfig_backup`, `ispconfig_cert_converge`, `nfs-client`, `vs_code`
+
+The collection is evolving from security-only toward a broader service deployment library, with molecule testing being added role-by-role (see Testing Framework below).
 
 ## Common Commands
 
@@ -103,21 +109,24 @@ See [.github/WORKFLOW_GUIDE.md](.github/WORKFLOW_GUIDE.md) for complete workflow
 
 ### Role Organization Patterns
 
-The collection follows a modular architecture with roles organized by functional domains:
+**Service Roles** (install + configure + verify):
+- `mariadb` - MariaDB server; Debian, Ubuntu, Rocky; molecule scenario live
+- `mysql` - MySQL 8 server; Debian; planned (needed by ghost)
+- `gitea` - Self-hosted Git; planned
+- `docker` - Docker Engine; Debian/Ubuntu; planned (new role)
+- `ghost` - Ghost CMS; Debian; planned, depends on mysql
+- `podman` - Rootless Podman; Rocky/RHEL only; molecule scenario live
 
-**Security & Auditing Pipeline**: 
-- `claude_sectest` - Multi-script security auditing with Git versioning and AI analysis integration
-- `fail2ban_config` - Advanced intrusion prevention with profile-based configuration
-- `sshd_harden` - SSH daemon hardening per security standards
-
-**Infrastructure Pipeline**:
-- `mariadb` - Database server with security-focused configuration
-- `ispconfig_backup` & `ispconfig_cert_converge` - ISPConfig automation with certificate management
-- `nfs-client` - Network storage client management
-
-**Development Tools**:
-- `vs_code`, `gitea`, `podman` - Development environment setup
+**Security Roles**:
+- `sshd_harden` - SSH daemon hardening
+- `fail2ban_config` - Intrusion prevention with profile-based configuration
+- `claude_sectest` - Multi-script security auditing with AI analysis integration
 - `wireguard` - VPN client configuration
+
+**Platform Utilities**:
+- `ispconfig_backup`, `ispconfig_cert_converge` - ISPConfig automation
+- `nfs-client` - Network storage client
+- `vs_code` - VS Code installation
 
 ### Key Architectural Patterns
 
@@ -146,34 +155,73 @@ The collection follows a modular architecture with roles organized by functional
 
 ### Testing Framework
 
-- **Molecule**: `molecule/podman/` scenario — tests the `podman` role across 3 platforms
-- **Cross-Platform**: Debian 12, Ubuntu 24, Rocky Linux 9 via testing-containers images
-- **Verification**: Roles include handlers and validation tasks for configuration verification
+**One scenario per role.** The role's supported platforms dictate the platform list in `molecule.yml`.
 
-**Running the molecule scenario:**
-
-```bash
-# Requires: source ~/.secrets/testing-containers-registry.conf gitea
-# Requires: solti-venv active with molecule + molecule-plugins[podman]
-
-molecule test -s podman               # full cycle: destroy → create → prepare → converge → verify → destroy
-molecule create -s podman             # create containers only
-molecule converge -s podman           # run podman role (repeatable without recreating)
-molecule verify -s podman             # verify podman is installed and rootless-capable
-molecule destroy -s podman            # clean up
-
-# Single platform:
-MOLECULE_PLATFORM_NAME=uut-deb12 molecule converge -s podman
+```
+molecule/
+  shared/podman/     ← driver: create.yml / prepare.yml / destroy.yml (reused by all scenarios)
+  shared/vars/       ← test-config.yml (project_root, report_root)
+  podman-role/       ← Rocky 9 only
+  mariadb/           ← Debian 12, Rocky 9, Ubuntu 24
+  docker/            ← Debian 12, Ubuntu 24 (planned)
+  gitea/             ← TBD (planned)
+  mysql/             ← Debian 12 (planned — MySQL 8, needed by ghost)
+  ghost/             ← Debian 12, depends on mysql (planned)
 ```
 
-**What the scenario tests:** The `podman` role installs Podman + crun + podman-compose (Debian)
-inside testing-containers that have rootless prerequisites pre-installed (uidmap/slirp4netns +
-subuid/subgid). Verify checks: podman binary, `podman info` as jackaltx, subuid mapping,
-crun presence, registries.conf.d deployed.
+**Running scenarios:**
 
-**Adding more roles:** Copy the pattern in `molecule/shared/podman/converge.yml` — add an
-`include_role` for the next target. `sshd_harden` is the natural next candidate (systemd
-service restart path, community.crypto key generation).
+```bash
+# Setup (once per shell session)
+source ~/.secrets/testing-containers-registry.conf gitea
+export GITEA_USER="$REGISTRY_USER" GITEA_PASSWD="$CONTAINER_TOKEN"
+cd /home/lavender/sandbox/ansible/jackaltx && source solti-venv/bin/activate
+cd solti-ensemble
+
+# Run a scenario
+molecule test -s podman-role          # Rocky 9: podman role (full cycle)
+molecule test -s mariadb              # Debian 12 + Rocky 9 + Ubuntu 24: mariadb role
+
+# Step-by-step (keep containers alive between runs)
+molecule create -s mariadb
+molecule converge -s mariadb          # repeatable
+molecule verify -s mariadb
+molecule destroy -s mariadb
+```
+
+**Multi-level verify pattern** — `roles/ROLE/tasks/verify.yml` is an auto-discovery orchestrator:
+
+```yaml
+- ansible.builtin.find:
+    paths: "{{ role_path }}/tasks"
+    patterns: "verify_[0-9]*.yml"
+  register: _verify_levels
+  delegate_to: localhost
+  run_once: true
+- ansible.builtin.include_tasks: "{{ item }}"
+  loop: "{{ _verify_levels.files | map(attribute='path') | sort | list }}"
+```
+
+Adding a test level = drop `verify_N_description.yml` in the role's `tasks/` — no edits required.
+Levels fail-fast: if verify_0 fails, verify_1 never runs.
+
+| Level | Purpose |
+|---|---|
+| `verify_0_install.yml` | Service running, binary present, port listening |
+| `verify_1_functional.yml` | Does it actually work (SQL round-trip, `podman run`, HTTP health) |
+| `verify_2_*` | Auth, edge cases — add as needed |
+
+**Platform notes:**
+- Rocky 9 mariadb: package is `mariadb` (not `mariadb-client`)
+- Ubuntu needs explicit `tasks/packages_ubuntu.yml` and `vars/ubuntu.yml` (no auto-fallback in `include_tasks`)
+- Rootless podman-in-podman: blocked by kernel when host is rootless podman; verify_1 runs `podman run` as root; rootless prerequisites verified in verify_0
+
+**Adding a new role scenario:**
+1. `mkdir molecule/ROLENAME`
+2. Copy `molecule.yml` from a similar scenario, adjust `platforms:` to what the role supports
+3. Write `converge.yml` (include_role + vars), `verify.yml` (calls `tasks_from: verify`)
+4. Write `roles/ROLE/tasks/verify.yml` (orchestrator), `verify_0_install.yml`, `verify_1_functional.yml`
+5. Add `requirements.yml` if the role needs extra collections
 
 ## Important Files and Locations
 
