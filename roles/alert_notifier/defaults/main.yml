@@ -26,3 +26,20 @@ fail2ban_alert_recipients: "jack@lavnet.net"
 # System user
 fail2ban_alert_user: "fail2ban-alert"
 fail2ban_alert_group: "fail2ban-alert"
+
+# ── _notifier_base channel enables ───────────────────────────────────────────
+# email is auto-enabled when smtp_host is set (backward compat)
+# matrix/redis/amqp are opt-in
+alert_notifier_matrix_enabled: false
+alert_notifier_matrix_homeserver: ""
+alert_notifier_matrix_token: ""
+alert_notifier_matrix_room_id: ""
+
+alert_notifier_redis_enabled: false
+alert_notifier_redis_url: ""
+alert_notifier_redis_channel: "solti_events"
+
+alert_notifier_amqp_enabled: false
+alert_notifier_amqp_url: ""
+alert_notifier_amqp_exchange: "solti_events"
+alert_notifier_amqp_routing_key: "fail2ban"

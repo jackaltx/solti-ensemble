@@ -1,0 +1,10 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Remove notifier library
+  ansible.builtin.file:
+    path: "{{ notifier_lib_dir }}/notifier.py"
+    state: absent
+
+- name: Remove solti lib dir if empty
+  ansible.builtin.command: rmdir --ignore-fail-on-non-empty {{ notifier_lib_dir }}
+  changed_when: false

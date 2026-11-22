@@ -1,0 +1,9 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Install notifier base
+  when: notifier_base_state == "present"
+  ansible.builtin.include_tasks: install.yml
+
+- name: Remove notifier base
+  when: notifier_base_state == "absent"
+  ansible.builtin.include_tasks: remove.yml

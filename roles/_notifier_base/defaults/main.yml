@@ -1,0 +1,4 @@
+#SPDX-License-Identifier: MIT-0
+---
+notifier_base_state: present
+notifier_lib_dir: /usr/local/lib/solti
