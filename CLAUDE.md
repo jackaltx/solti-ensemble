@@ -146,9 +146,34 @@ The collection follows a modular architecture with roles organized by functional
 
 ### Testing Framework
 
-- **Molecule**: Some roles include molecule testing scenarios
-- **Cross-Platform**: Supports Debian 12, Ubuntu, Rocky Linux 9, and Raspberry Pi OS
+- **Molecule**: `molecule/podman/` scenario — tests the `podman` role across 3 platforms
+- **Cross-Platform**: Debian 12, Ubuntu 24, Rocky Linux 9 via testing-containers images
 - **Verification**: Roles include handlers and validation tasks for configuration verification
+
+**Running the molecule scenario:**
+
+```bash
+# Requires: source ~/.secrets/testing-containers-registry.conf gitea
+# Requires: solti-venv active with molecule + molecule-plugins[podman]
+
+molecule test -s podman               # full cycle: destroy → create → prepare → converge → verify → destroy
+molecule create -s podman             # create containers only
+molecule converge -s podman           # run podman role (repeatable without recreating)
+molecule verify -s podman             # verify podman is installed and rootless-capable
+molecule destroy -s podman            # clean up
+
+# Single platform:
+MOLECULE_PLATFORM_NAME=uut-deb12 molecule converge -s podman
+```
+
+**What the scenario tests:** The `podman` role installs Podman + crun + podman-compose (Debian)
+inside testing-containers that have rootless prerequisites pre-installed (uidmap/slirp4netns +
+subuid/subgid). Verify checks: podman binary, `podman info` as jackaltx, subuid mapping,
+crun presence, registries.conf.d deployed.
+
+**Adding more roles:** Copy the pattern in `molecule/shared/podman/converge.yml` — add an
+`include_role` for the next target. `sshd_harden` is the natural next candidate (systemd
+service restart path, community.crypto key generation).
 
 ## Important Files and Locations
 

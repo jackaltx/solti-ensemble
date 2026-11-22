@@ -1,0 +1,89 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_EPHEMERAL_DIRECTORY}/requirements.yml
+    ignore-errors: true
+
+driver:
+  name: podman
+  options:
+    managed: true
+    platform_name: ${MOLECULE_PLATFORM_NAME:-all}
+
+platforms:
+  - name: "uut-deb12"
+    image: "gitea.{{ domain }}/jackaltx/testing-containers/debian-ssh:12"
+    network: "ensemble-net"
+    command: "/sbin/init"
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    ssh_host: "127.0.0.1"
+    ssh_port: 2223
+    ssh_user: "jackaltx"
+    connection: ssh
+
+  - name: "uut-rocky9"
+    image: "gitea.{{ domain }}/jackaltx/testing-containers/rocky-ssh:9"
+    network: "ensemble-net"
+    command: "/sbin/init"
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    ssh_host: "127.0.0.1"
+    ssh_port: 2224
+    ssh_user: "jackaltx"
+    connection: ssh
+
+  - name: "uut-ubuntu24"
+    image: "gitea.{{ domain }}/jackaltx/testing-containers/ubuntu-ssh:24"
+    network: "ensemble-net"
+    command: "/sbin/init"
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    ssh_host: "127.0.0.1"
+    ssh_port: 2225
+    ssh_user: "jackaltx"
+    connection: ssh
+
+provisioner:
+  name: ansible
+  log: true
+  env:
+    ANSIBLE_SSH_ARGS: "-o IdentityFile=~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ANSIBLE_DEPRECATION_WARNINGS: "False"
+  config_options:
+    defaults:
+      roles_path: roles
+      interpreter_python: auto_silent
+      host_key_checking: false
+      ansible_managed: "Ansible managed"
+  playbooks:
+    create: "../shared/podman/create.yml"
+    prepare: "../shared/podman/prepare.yml"
+    converge: "../shared/podman/converge.yml"
+    verify: "../shared/verify/main.yml"
+    destroy: "../shared/podman/destroy.yml"
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: ssh
+        ansible_user: "jackaltx"
+
+scenario:
+  name: podman
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

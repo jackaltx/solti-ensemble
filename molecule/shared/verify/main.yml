@@ -1,0 +1,68 @@
+---
+- name: Verify
+  hosts: "{{ lookup('env', 'MOLECULE_PLATFORM_NAME', default='all') }}"
+  become: false
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Check podman binary exists
+      ansible.builtin.command: which podman
+      register: podman_which
+      changed_when: false
+      failed_when: podman_which.rc != 0
+
+    - name: Check podman version
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: Show podman version
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    - name: Check podman info (rootless)
+      ansible.builtin.command: podman info
+      register: podman_info
+      changed_when: false
+      become: false
+
+    - name: Verify subuid mapping exists for jackaltx
+      ansible.builtin.command: grep jackaltx /etc/subuid
+      register: subuid_check
+      changed_when: false
+      become: true
+      failed_when: subuid_check.rc != 0
+
+    - name: Show subuid entry
+      ansible.builtin.debug:
+        msg: "subuid: {{ subuid_check.stdout }}"
+
+    - name: Verify crun is installed
+      ansible.builtin.command: which crun
+      register: crun_which
+      changed_when: false
+      failed_when: crun_which.rc != 0
+
+    - name: Verify site-registries.conf was deployed
+      ansible.builtin.stat:
+        path: /etc/containers/registries.conf.d
+      register: registries_dir
+      become: true
+
+    - name: Assert registries directory exists
+      ansible.builtin.assert:
+        that: registries_dir.stat.exists
+        fail_msg: "/etc/containers/registries.conf.d was not created by role"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Podman: {{ podman_version.stdout }}"
+          - "crun: present"
+          - "subuid: {{ subuid_check.stdout }}"
+          - "registries.conf.d: {{ registries_dir.stat.exists }}"

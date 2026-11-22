@@ -1,0 +1,59 @@
+---
+- name: Prepare
+  hosts: "{{ lookup('env', 'MOLECULE_PLATFORM_NAME', default='all') }}"
+  gather_facts: true
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ensure verify_output directory exists
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/verify_output"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+
+    - name: Connection information
+      debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Ansible host: {{ ansible_host | default('undefined') }}"
+          - "Ansible port: {{ ansible_port | default('undefined') }}"
+          - "Connection type: {{ ansible_connection | default('undefined') }}"
+
+    - name: Get basic system info
+      setup:
+        gather_subset:
+          - "min"
+          - "distribution"
+          - "pkg_mgr"
+
+    - name: Debug system info
+      debug:
+        msg:
+          - "Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "OS Family: {{ ansible_os_family }}"
+          - "Package Manager: {{ ansible_pkg_mgr }}"
+
+    - name: Ensure systemd is available
+      command: systemctl --version
+      changed_when: false
+      register: systemd_check
+
+    - name: Show systemd version
+      debug:
+        msg: "{{ systemd_check.stdout_lines[0] }}"
+
+    - name: Ensure ansible temp directory exists
+      become: true
+      ansible.builtin.file:
+        path: /tmp/ansible-tmp
+        state: directory
+        owner: root
+        group: root
+        mode: "0777"
