@@ -1,0 +1,73 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 3: security posture — SSH key options, isolation, journald event counts
+# All journald counts are advisory (no assert). Hard asserts only on structural security.
+
+- name: Check SSH key has restrict option
+  ansible.builtin.command: >
+    grep -c "restrict" /home/{{ mail_agent_user }}/.ssh/authorized_keys
+  changed_when: false
+  register: _restrict_check
+  ignore_errors: true
+
+- name: Test mailagent cannot run arbitrary root commands
+  ansible.builtin.command: sudo -u {{ mail_agent_user }} sudo ls /root
+  become: true
+  changed_when: false
+  register: _isolation_test
+  ignore_errors: true
+
+- name: Get dovecot auth failures in last 24h
+  ansible.builtin.command: >
+    journalctl -u dovecot --since "24 hours ago" --no-pager -q
+  changed_when: false
+  register: _dovecot_journal
+  ignore_errors: true
+
+- name: Get postfix rejects in last 1h
+  ansible.builtin.command: >
+    journalctl -u "postfix@*" --since "1 hour ago" --no-pager -q
+  changed_when: false
+  register: _postfix_journal
+  ignore_errors: true
+
+- name: Get mailagent SSH activity in last 24h
+  ansible.builtin.command: >
+    journalctl -u ssh --since "24 hours ago" --no-pager -q
+  changed_when: false
+  register: _ssh_journal
+  ignore_errors: true
+
+- name: Compute advisory security counts
+  ansible.builtin.set_fact:
+    _auth_failures: "{{ _dovecot_journal.stdout_lines | default([]) | select('search', 'auth failed') | list | length }}"
+    _noqueue_rejects: "{{ _postfix_journal.stdout_lines | default([]) | select('search', 'NOQUEUE') | list | length }}"
+    _mailagent_logins: "{{ _ssh_journal.stdout_lines | default([]) | select('search', mail_agent_user) | list }}"
+
+- name: Show SSH key restriction status
+  ansible.builtin.debug:
+    msg: "SSH key restrict option: {{ 'pass' if (_restrict_check.rc | default(1)) == 0 else 'FAIL — key missing restrict' }}"
+
+- name: Show isolation test result
+  ansible.builtin.debug:
+    msg: "mailagent isolation (cannot sudo ls /root): {{ 'pass' if _isolation_test.rc != 0 else 'FAIL — arbitrary root access allowed' }}"
+
+- name: Show advisory security summary
+  ansible.builtin.debug:
+    msg:
+      - "dovecot auth failures (24h): {{ _auth_failures }}"
+      - "postfix NOQUEUE rejects (1h): {{ _noqueue_rejects }} (high = healthy, spam rejected)"
+      - "mailagent SSH sessions (24h): {{ _mailagent_logins | length }} entries"
+
+- name: Show mailagent SSH session detail
+  ansible.builtin.debug:
+    msg: "{{ _mailagent_logins }}"
+  when: _mailagent_logins | length > 0
+
+- name: Assert structural security
+  ansible.builtin.assert:
+    that:
+      - (_restrict_check.rc | default(1)) == 0
+      - _isolation_test.rc != 0
+    fail_msg: "mail_agent security check failed — see debug output above"
+    success_msg: "mail_agent security checks passed"

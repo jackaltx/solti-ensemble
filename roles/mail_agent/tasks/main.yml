@@ -44,6 +44,15 @@
     groups: "{{ mail_agent_groups }}"
     append: false
 
+# ansible.builtin.user creates home with 0755 by default; lock it down
+- name: Restrict mail agent home directory
+  when: mail_agent_state == "present"
+  ansible.builtin.file:
+    path: "/home/{{ mail_agent_user }}"
+    owner: "{{ mail_agent_user }}"
+    group: "{{ mail_agent_user }}"
+    mode: "0700"
+
 # SMELL not sure I want to restrict to a single address.  the user should only have key access
 # key_options: restrict alone enforces key-only auth (no PTY, no forwarding, no agent)
 # from= is defense-in-depth and is optional — omitted when mail_agent_ssh_source is empty

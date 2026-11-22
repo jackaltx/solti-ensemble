@@ -1,0 +1,99 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 2: configuration drift — wrapper integrity, postfix/dovecot key settings
+
+- name: Check wrapper ownership and mode
+  ansible.builtin.stat:
+    path: /usr/local/sbin/mail-agent-op
+  register: _wrapper_stat
+
+- name: Check sudoers ownership and mode
+  ansible.builtin.stat:
+    path: "/etc/sudoers.d/{{ mail_agent_user }}"
+  register: _sudoers_stat
+
+- name: Check wrapper contains expected actions
+  ansible.builtin.command: grep -c "envelope\|userinfo\|logs\|audit" /usr/local/sbin/mail-agent-op
+  changed_when: false
+  register: _wrapper_actions
+  ignore_errors: true
+
+- name: Run postfix config check
+  ansible.builtin.command: postfix check
+  changed_when: false
+  become: true
+  register: _postfix_check
+  ignore_errors: true
+
+- name: Get key postfix settings
+  ansible.builtin.command: postconf {{ item }}
+  changed_when: false
+  become: true
+  register: _postfix_conf
+  loop:
+    - smtpd_tls_security_level
+    - inet_interfaces
+    - smtpd_recipient_restrictions
+    - mynetworks
+  ignore_errors: true
+
+- name: Get dovecot SSL setting
+  ansible.builtin.command: doveconf -c /etc/dovecot/dovecot.conf ssl
+  changed_when: false
+  become: true
+  register: _dovecot_ssl
+  ignore_errors: true
+
+- name: Get dovecot auth mechanisms
+  ansible.builtin.command: doveconf -c /etc/dovecot/dovecot.conf auth_mechanisms
+  changed_when: false
+  become: true
+  register: _dovecot_auth
+  ignore_errors: true
+
+- name: Get recent dovecot log errors
+  ansible.builtin.command: >
+    sudo -u {{ mail_agent_user }} sudo doveadm log errors
+  become: true
+  changed_when: false
+  register: _dove_errors
+  ignore_errors: true
+
+- name: Show wrapper/sudoers integrity
+  ansible.builtin.debug:
+    msg:
+      - "wrapper owner={{ _wrapper_stat.stat.pw_name | default('?') }} mode={{ _wrapper_stat.stat.mode | default('?') }}: {{ 'pass' if _wrapper_stat.stat.pw_name == 'root' and _wrapper_stat.stat.mode == '0755' else 'FAIL' }}"
+      - "sudoers owner={{ _sudoers_stat.stat.pw_name | default('?') }} mode={{ _sudoers_stat.stat.mode | default('?') }}: {{ 'pass' if _sudoers_stat.stat.pw_name == 'root' and _sudoers_stat.stat.mode == '0440' else 'FAIL' }}"
+      - "wrapper actions present: {{ 'pass' if (_wrapper_actions.rc | default(1)) == 0 else 'FAIL' }}"
+
+- name: Show postfix config
+  ansible.builtin.debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ _postfix_conf.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Show postfix check result
+  ansible.builtin.debug:
+    msg: "postfix check: {{ 'pass' if _postfix_check.rc == 0 else 'FAIL: ' + (_postfix_check.stderr | default('')) }}"
+
+- name: Show dovecot config
+  ansible.builtin.debug:
+    msg:
+      - "{{ _dovecot_ssl.stdout | default('dovecot ssl: unavailable') }}"
+      - "{{ _dovecot_auth.stdout | default('dovecot auth_mechanisms: unavailable') }}"
+
+- name: Show recent dovecot errors
+  ansible.builtin.debug:
+    msg: "dovecot log errors: {{ _dove_errors.stdout_lines | default([]) }}"
+
+- name: Assert wrapper integrity and postfix config valid
+  ansible.builtin.assert:
+    that:
+      - _wrapper_stat.stat.pw_name == 'root'
+      - _wrapper_stat.stat.mode == '0755'
+      - _sudoers_stat.stat.pw_name == 'root'
+      - _sudoers_stat.stat.mode == '0440'
+      - _postfix_check.rc == 0
+    fail_msg: "mail_agent drift check failed — see debug output above"
+    success_msg: "mail_agent drift checks passed"

@@ -1,0 +1,67 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 0: deployment artifacts exist — user, home, SSH key, wrapper, sudoers
+
+- name: Check mail agent user exists
+  ansible.builtin.command: id {{ mail_agent_user }}
+  changed_when: false
+  register: _user_check
+  ignore_errors: true
+
+- name: Check home directory mode
+  ansible.builtin.stat:
+    path: "/home/{{ mail_agent_user }}"
+  register: _home_stat
+
+- name: Check authorized_keys exists
+  ansible.builtin.stat:
+    path: "/home/{{ mail_agent_user }}/.ssh/authorized_keys"
+  register: _authkeys_stat
+
+- name: Check wrapper script exists
+  ansible.builtin.stat:
+    path: /usr/local/sbin/mail-agent-op
+  register: _wrapper_stat
+
+- name: Check sudoers file exists
+  ansible.builtin.stat:
+    path: "/etc/sudoers.d/{{ mail_agent_user }}"
+  register: _sudoers_stat
+
+- name: Validate sudoers syntax
+  ansible.builtin.command: visudo -cf /etc/sudoers.d/{{ mail_agent_user }}
+  changed_when: false
+  register: _sudoers_syntax
+  ignore_errors: true
+  when: _sudoers_stat.stat.exists
+
+- name: Validate wrapper script syntax
+  ansible.builtin.command: bash -n /usr/local/sbin/mail-agent-op
+  changed_when: false
+  register: _wrapper_syntax
+  ignore_errors: true
+  when: _wrapper_stat.stat.exists
+
+- name: Show install check results
+  ansible.builtin.debug:
+    msg:
+      - "user {{ mail_agent_user }}: {{ 'pass' if _user_check.rc == 0 else 'FAIL' }}"
+      - "home mode {{ _home_stat.stat.mode | default('missing') }}: {{ 'pass' if _home_stat.stat.exists and _home_stat.stat.mode == '0700' else 'FAIL' }}"
+      - "authorized_keys: {{ 'pass' if _authkeys_stat.stat.exists else 'FAIL' }}"
+      - "wrapper script: {{ 'pass' if _wrapper_stat.stat.exists and _wrapper_stat.stat.mode == '0755' else 'FAIL' }}"
+      - "sudoers file mode {{ _sudoers_stat.stat.mode | default('missing') }}: {{ 'pass' if _sudoers_stat.stat.exists and _sudoers_stat.stat.mode == '0440' else 'FAIL' }}"
+      - "sudoers syntax: {{ 'pass' if (_sudoers_syntax.rc | default(1)) == 0 else 'FAIL' }}"
+      - "wrapper syntax: {{ 'pass' if (_wrapper_syntax.rc | default(1)) == 0 else 'FAIL' }}"
+
+- name: Assert all install checks pass
+  ansible.builtin.assert:
+    that:
+      - _user_check.rc == 0
+      - _home_stat.stat.exists and _home_stat.stat.mode == '0700'
+      - _authkeys_stat.stat.exists
+      - _wrapper_stat.stat.exists and _wrapper_stat.stat.mode == '0755'
+      - _sudoers_stat.stat.exists and _sudoers_stat.stat.mode == '0440'
+      - (_sudoers_syntax.rc | default(1)) == 0
+      - (_wrapper_syntax.rc | default(1)) == 0
+    fail_msg: "mail_agent install check failed — see debug output above"
+    success_msg: "mail_agent install checks passed"

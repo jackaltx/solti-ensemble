@@ -28,5 +28,8 @@ case $action in
   mailboxes) user;  exec /usr/bin/doveadm mailbox status -u "$arg" "messages vsize unseen" '*' ;;
   kick)      user;  exec /usr/bin/doveadm kick "$arg" ;;
   logs)      lines; exec /usr/bin/journalctl --no-pager -n "$arg" -u 'postfix@*' -u dovecot ;;
+  audit)     lines;
+             /usr/bin/journalctl --no-pager -n "$arg" _COMM=sudo | grep "{{ mail_agent_user }}"
+             exit $? ;;
   *)         die "unknown action" ;;
 esac

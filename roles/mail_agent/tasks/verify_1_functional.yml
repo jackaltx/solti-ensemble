@@ -1,0 +1,73 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Level 1: mail services running, ports listening, wrapper executes end-to-end
+
+- name: Check core mail service status
+  ansible.builtin.command: systemctl is-active {{ item }}
+  changed_when: false
+  register: _svc_check
+  loop:
+    - postfix
+    - dovecot
+  ignore_errors: true
+
+- name: Check optional mail service status
+  ansible.builtin.command: systemctl is-active {{ item }}
+  changed_when: false
+  register: _opt_svc_check
+  loop:
+    - rspamd
+    - clamav-daemon
+  ignore_errors: true
+
+- name: Check sieve/pigeonhole is available
+  ansible.builtin.stat:
+    path: /usr/lib/dovecot/modules/sieve
+  register: _sieve_stat
+
+- name: Check mail ports listening
+  ansible.builtin.command: ss -tlnp
+  changed_when: false
+  register: _ports
+
+- name: Execute wrapper via full sudo chain
+  ansible.builtin.command: >
+    sudo -u {{ mail_agent_user }} sudo /usr/local/sbin/mail-agent-op logs 5
+  become: true
+  changed_when: false
+  register: _wrapper_exec
+  ignore_errors: true
+
+- name: Show optional service status
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item }}: {{ item.stdout | default('inactive') }}
+      {{ '' if item.rc == 0 else '(WARNING: not running)' }}
+  loop: "{{ _opt_svc_check.results }}"
+
+- name: Show sieve status
+  ansible.builtin.debug:
+    msg: "sieve/pigeonhole: {{ 'present' if _sieve_stat.stat.exists else 'WARNING: not found at /usr/lib/dovecot/modules/sieve' }}"
+
+- name: Show port check results
+  ansible.builtin.debug:
+    msg:
+      - "port 25  (SMTP):       {{ 'pass' if ':25 ' in _ports.stdout else 'FAIL' }}"
+      - "port 587 (submission): {{ 'pass' if ':587 ' in _ports.stdout else 'FAIL' }}"
+      - "port 143 (IMAP):       {{ 'pass' if ':143 ' in _ports.stdout else 'FAIL' }}"
+      - "port 993 (IMAPS):      {{ 'pass' if ':993 ' in _ports.stdout else 'FAIL' }}"
+
+- name: Show wrapper execution result
+  ansible.builtin.debug:
+    msg: "wrapper exec: {{ 'pass' if _wrapper_exec.rc == 0 else 'FAIL: ' + (_wrapper_exec.stderr | default('')) }}"
+
+- name: Assert core services and wrapper
+  ansible.builtin.assert:
+    that:
+      - _svc_check.results | selectattr('rc', 'ne', 0) | list | length == 0
+      - "':25 ' in _ports.stdout"
+      - "':587 ' in _ports.stdout"
+      - "':993 ' in _ports.stdout"
+      - _wrapper_exec.rc == 0
+    fail_msg: "mail_agent functional check failed — see debug output above"
+    success_msg: "mail_agent functional checks passed"
