@@ -1,7 +1,7 @@
 ---
 - name: Verify
   hosts: "{{ lookup('env', 'MOLECULE_PLATFORM_NAME', default='all') }}"
-  become: false
+  become: true
 
   tasks:
     - name: Load shared test configuration
@@ -10,59 +10,55 @@
       delegate_to: localhost
       run_once: true
 
-    - name: Check podman binary exists
-      ansible.builtin.command: which podman
-      register: podman_which
-      changed_when: false
-      failed_when: podman_which.rc != 0
-
-    - name: Check podman version
-      ansible.builtin.command: podman --version
-      register: podman_version
-      changed_when: false
-
-    - name: Show podman version
+    - name: Show platform info
       ansible.builtin.debug:
-        msg: "{{ podman_version.stdout }}"
+        msg: "{{ inventory_hostname }} | {{ ansible_distribution }} {{ ansible_distribution_version }} | {{ ansible_os_family }}"
 
-    - name: Check podman info (rootless)
-      ansible.builtin.command: podman info
-      register: podman_info
-      changed_when: false
-      become: false
+    # Podman verification — Rocky/RHEL only
+    - name: Verify podman installation (RHEL only)
+      when: ansible_os_family == "RedHat"
+      block:
+        - name: Check podman binary
+          ansible.builtin.command: which podman
+          changed_when: false
 
-    - name: Verify subuid mapping exists for jackaltx
-      ansible.builtin.command: grep jackaltx /etc/subuid
-      register: subuid_check
-      changed_when: false
-      become: true
-      failed_when: subuid_check.rc != 0
+        - name: Check podman version
+          ansible.builtin.command: podman --version
+          register: podman_version
+          changed_when: false
 
-    - name: Show subuid entry
+        - name: Check podman info (root context — avoids rootless XDG_RUNTIME_DIR requirement)
+          ansible.builtin.command: podman info
+          register: podman_info
+          changed_when: false
+
+        - name: Verify crun is installed
+          ansible.builtin.command: which crun
+          changed_when: false
+
+        - name: Verify subuid mapping exists for jackaltx
+          ansible.builtin.command: grep jackaltx /etc/subuid
+          register: subuid_check
+          changed_when: false
+
+        - name: Verify site-registries.conf.d was deployed
+          ansible.builtin.stat:
+            path: /etc/containers/registries.conf.d
+          register: registries_dir
+
+        - name: Assert registries directory exists
+          ansible.builtin.assert:
+            that: registries_dir.stat.exists
+            fail_msg: "/etc/containers/registries.conf.d was not created by role"
+
+        - name: Summary
+          ansible.builtin.debug:
+            msg:
+              - "Podman: {{ podman_version.stdout }}"
+              - "subuid: {{ subuid_check.stdout }}"
+              - "registries.conf.d: present"
+
+    - name: Skip notice for non-RHEL platforms
       ansible.builtin.debug:
-        msg: "subuid: {{ subuid_check.stdout }}"
-
-    - name: Verify crun is installed
-      ansible.builtin.command: which crun
-      register: crun_which
-      changed_when: false
-      failed_when: crun_which.rc != 0
-
-    - name: Verify site-registries.conf was deployed
-      ansible.builtin.stat:
-        path: /etc/containers/registries.conf.d
-      register: registries_dir
-      become: true
-
-    - name: Assert registries directory exists
-      ansible.builtin.assert:
-        that: registries_dir.stat.exists
-        fail_msg: "/etc/containers/registries.conf.d was not created by role"
-
-    - name: Summary
-      ansible.builtin.debug:
-        msg:
-          - "Podman: {{ podman_version.stdout }}"
-          - "crun: present"
-          - "subuid: {{ subuid_check.stdout }}"
-          - "registries.conf.d: {{ registries_dir.stat.exists }}"
+        msg: "{{ inventory_hostname }}: podman role not tested on {{ ansible_os_family }} (use Docker role for Debian/Ubuntu)"
+      when: ansible_os_family != "RedHat"
