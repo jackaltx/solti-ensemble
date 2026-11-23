@@ -1,0 +1,11 @@
+[Unit]
+Description=Mail Stack Status Collector Timer
+Documentation=https://github.com/jackaltx/solti-ensemble
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ mail_agent_status_interval }}
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,70 @@
+---
+# Install or remove the mail-agent-status systemd timer.
+# Prerequisite: mail_agent present (mailagent user + wrapper must exist).
+#
+# Install:   manage-feature.sh -h fleur mail_agent status_timer  (uses mail_agent_status_timer_state)
+# Remove:    manage-feature.sh -h fleur mail_agent status_timer -e mail_agent_status_timer_state=absent
+
+- name: Deploy mail-agent-status script
+  when: mail_agent_status_timer_state == 'present'
+  ansible.builtin.template:
+    src: mail-agent-status.py.j2
+    dest: /usr/local/bin/mail-agent-status.py
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart mail-agent-status timer
+
+- name: Deploy systemd service
+  when: mail_agent_status_timer_state == 'present'
+  ansible.builtin.template:
+    src: mail-agent-status.service.j2
+    dest: /etc/systemd/system/mail-agent-status.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd for mail_agent
+    - Restart mail-agent-status timer
+
+- name: Deploy systemd timer
+  when: mail_agent_status_timer_state == 'present'
+  ansible.builtin.template:
+    src: mail-agent-status.timer.j2
+    dest: /etc/systemd/system/mail-agent-status.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd for mail_agent
+    - Enable mail-agent-status timer
+
+- name: Enable and start timer
+  when: mail_agent_status_timer_state == 'present'
+  ansible.builtin.systemd:
+    name: mail-agent-status.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# ── removal ──────────────────────────────────────────────────────────────────
+
+- name: Stop and disable timer
+  when: mail_agent_status_timer_state == 'absent'
+  ansible.builtin.systemd:
+    name: mail-agent-status.timer
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  ignore_errors: true
+
+- name: Remove systemd units and script
+  when: mail_agent_status_timer_state == 'absent'
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/mail-agent-status.timer
+    - /etc/systemd/system/mail-agent-status.service
+    - /usr/local/bin/mail-agent-status.py
+  notify: Reload systemd for mail_agent

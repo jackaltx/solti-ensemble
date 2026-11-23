@@ -1,0 +1,16 @@
+---
+# Handlers for mail_agent role
+
+- name: Reload systemd for mail_agent
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable mail-agent-status timer
+  ansible.builtin.systemd:
+    name: mail-agent-status.timer
+    enabled: true
+
+- name: Restart mail-agent-status timer
+  ansible.builtin.systemd:
+    name: mail-agent-status.timer
+    state: restarted

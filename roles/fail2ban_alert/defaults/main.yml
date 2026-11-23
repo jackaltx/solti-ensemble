@@ -1,0 +1,46 @@
+---
+# fail2ban_alert role defaults
+
+# State management
+fail2ban_alert_state: present  # present or absent
+
+# Loki endpoint
+fail2ban_alert_loki_url: "http://monitor11.a0a0.org:3100"
+
+# Alert thresholds
+fail2ban_alert_threshold: 25
+fail2ban_alert_cooldown_minutes: 60
+
+# SMTP — no defaults, must be set via inventory or vars_files
+fail2ban_alert_smtp_host: ""
+fail2ban_alert_smtp_port: 587
+fail2ban_alert_smtp_username: ""
+fail2ban_alert_smtp_password: ""
+fail2ban_alert_from_address: ""
+
+# Alert recipients
+fail2ban_alert_recipients: "jack@lavnet.net"
+
+# System user
+fail2ban_alert_user: "fail2ban-alert"
+fail2ban_alert_group: "fail2ban-alert"
+
+# no_log standard
+fail2ban_alert_no_log: "{{ mylab_nolog | default(true) }}"
+
+# ── _notifier_base channel enables ───────────────────────────────────────────
+# email is auto-enabled when smtp_host is set
+# matrix/redis/amqp are opt-in
+fail2ban_alert_matrix_enabled: false
+fail2ban_alert_matrix_homeserver: ""
+fail2ban_alert_matrix_token: ""
+fail2ban_alert_matrix_room_id: ""
+
+fail2ban_alert_redis_enabled: false
+fail2ban_alert_redis_url: ""
+fail2ban_alert_redis_channel: "solti_events"
+
+fail2ban_alert_amqp_enabled: false
+fail2ban_alert_amqp_url: ""
+fail2ban_alert_amqp_exchange: "solti_events"
+fail2ban_alert_amqp_routing_key: "fail2ban"

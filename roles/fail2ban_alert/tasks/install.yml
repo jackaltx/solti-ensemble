@@ -5,19 +5,15 @@
   ansible.builtin.include_role:
     name: _notifier_base
 
+- name: Show channel config (debug)
+  ansible.builtin.debug:
+    msg: "smtp_host={{ fail2ban_alert_smtp_host }} matrix={{ fail2ban_alert_matrix_enabled }} redis={{ fail2ban_alert_redis_enabled }} amqp={{ fail2ban_alert_amqp_enabled }}"
+
 - name: Assert at least one channel is configured
   ansible.builtin.assert:
-    that: >
-      (fail2ban_alert_smtp_host | length > 0) or
-      (alert_notifier_matrix_enabled | bool) or
-      (alert_notifier_redis_enabled | bool) or
-      (alert_notifier_amqp_enabled | bool)
-    fail_msg: >
-      No notification channel configured. Set one of:
-        fail2ban_alert_smtp_host (email)
-        alert_notifier_matrix_enabled: true (Matrix)
-        alert_notifier_redis_enabled: true (Redis)
-        alert_notifier_amqp_enabled: true (AMQP)
+    that:
+      - "(fail2ban_alert_smtp_host | length > 0) or (fail2ban_alert_matrix_enabled | bool) or (fail2ban_alert_redis_enabled | bool) or (fail2ban_alert_amqp_enabled | bool)"
+    fail_msg: "No notification channel configured — set fail2ban_alert_smtp_host or enable matrix/redis/amqp channel"
 
 - name: Assert SMTP credentials when email channel is used
   when: fail2ban_alert_smtp_host | length > 0

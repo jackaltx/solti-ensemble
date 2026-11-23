@@ -1,0 +1,108 @@
+{% raw %}#!/usr/bin/env python3
+"""
+Mail stack status sensor — collects metrics via mail-agent-op wrapper,
+emits one JSON line to stdout for journal → Loki ingestion.
+Deployed by: solti-ensemble/roles/mail_agent
+Runs as: mailagent (systemd User=)
+"""
+import datetime
+import json
+import re
+import subprocess
+import sys
+import time
+
+
+def run_op(*args, timeout=30):
+    cmd = ['sudo', '/usr/local/sbin/mail-agent-op'] + list(args)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return result.stdout, result.returncode
+
+
+def queue_stats():
+    out, rc = run_op('queue')
+    if rc != 0:
+        return {'queue_depth': -1, 'deferred': -1}
+    if not out.strip() or 'Mail queue is empty' in out:
+        return {'queue_depth': 0, 'deferred': 0}
+    lines = out.strip().split('\n')
+    # postqueue -p: active msgs start with hex ID, deferred start with '!'
+    active = sum(1 for l in lines if re.match(r'^[A-F0-9]', l))
+    deferred = sum(1 for l in lines if l.startswith('!'))
+    return {'queue_depth': active + deferred, 'deferred': deferred}
+
+
+def auth_failures(log_lines):
+    out, rc = run_op('logs', str(log_lines))
+    if rc != 0:
+        return -1
+    return sum(1 for l in out.split('\n') if 'auth failed' in l.lower())
+
+
+def active_sessions():
+    out, rc = run_op('sessions')
+    if rc != 0:
+        return -1
+    # doveadm who: one line per active connection, header excluded
+    lines = [l for l in out.strip().split('\n') if l.strip() and not l.startswith('username')]
+    return len(lines)
+
+
+def user_count():
+    out, rc = run_op('users')
+    if rc != 0:
+        return -1
+    return len([l for l in out.strip().split('\n') if l.strip()])
+
+
+def recent_dovecot_errors(window_minutes=30):
+    """Count dovecot errors in the last window_minutes from doveadm log errors."""
+    out, rc = run_op('errors')
+    if rc != 0:
+        return -1
+    cutoff = datetime.datetime.now() - datetime.timedelta(minutes=window_minutes)
+    year = datetime.datetime.now().year
+    count = 0
+    for line in out.strip().split('\n'):
+        if not line.strip():
+            continue
+        # Format: "Nov 18 21:17:45 Error: ..."
+        m = re.match(r'^(\w+ +\d+ \d+:\d+:\d+)', line)
+        if m:
+            try:
+                ts = datetime.datetime.strptime(f"{year} {m.group(1)}", "%Y %b %d %H:%M:%S")
+                if ts >= cutoff:
+                    count += 1
+            except ValueError:
+                pass
+    return count
+
+
+def main():
+    log_lines = {% endraw %}{{ mail_agent_status_log_lines }}{% raw %}
+
+    q = queue_stats()
+    errors_30m = recent_dovecot_errors(window_minutes=30)
+    stats = {
+        'component': 'mail_agent',
+        'timestamp': int(time.time()),
+        'queue_depth': q['queue_depth'],
+        'deferred': q['deferred'],
+        'auth_failures_recent': auth_failures(log_lines),
+        'active_sessions': active_sessions(),
+        'user_count': user_count(),
+        'dovecot_errors_30m': errors_30m,
+        'level': 'info',
+    }
+
+    # Escalate level if anomalies detected
+    if stats['deferred'] > 0 or errors_30m > 0:
+        stats['level'] = 'warn'
+
+    print(json.dumps(stats), flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+{% endraw %}

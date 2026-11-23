@@ -1,0 +1,10 @@
+---
+# fail2ban_alert role - state-based installation/removal
+
+- name: Install fail2ban alert
+  ansible.builtin.include_tasks: install.yml
+  when: fail2ban_alert_state == 'present'
+
+- name: Remove fail2ban alert
+  ansible.builtin.include_tasks: remove.yml
+  when: fail2ban_alert_state == 'absent'

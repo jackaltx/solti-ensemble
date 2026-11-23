@@ -1,5 +1,5 @@
 ---
-# Handlers for alert_notifier role
+# Handlers for fail2ban_alert role
 
 - name: Reload systemd
   ansible.builtin.systemd:

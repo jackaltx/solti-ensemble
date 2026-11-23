@@ -15,6 +15,7 @@ mail_agent_allow_restart: true     # controls the systemctl restart rules
 # no_log standard — set false to debug credential tasks
 mail_agent_no_log: "{{ mylab_nolog | default(true) }}"
 
-# Loki query tool — not yet implemented (open items 3 & 4 from mail_agent_plan.md)
-# mail_agent_loki_url: ""          # Loki or Grafana datasource proxy endpoint
-# mail_agent_loki_token: ""        # read-only token scoped to mail selector only
+# Status timer
+mail_agent_status_timer_state: absent   # set present to enable status timer
+mail_agent_status_interval: "10min"     # OnUnitActiveSec interval
+mail_agent_status_log_lines: 200        # lines of mail journal to parse for auth failures

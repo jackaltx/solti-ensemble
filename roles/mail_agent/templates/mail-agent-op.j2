@@ -33,5 +33,7 @@ case $action in
              exit $? ;;
   queue)     exec /usr/sbin/postqueue -p ;;
   users)     exec /usr/bin/doveadm user '*' ;;
+  sessions)  exec /usr/bin/doveadm who ;;
+  errors)    exec /usr/bin/doveadm log errors ;;
   *)         die "unknown action" ;;
 esac

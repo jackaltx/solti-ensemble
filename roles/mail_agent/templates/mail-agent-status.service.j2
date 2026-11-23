@@ -1,0 +1,15 @@
+[Unit]
+Description=Mail Stack Status Collector
+Documentation=https://github.com/jackaltx/solti-ensemble
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mail-agent-status.py
+User={{ mail_agent_user }}
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mail-agent-status
+
+# Minimal hardening — NoNewPrivileges/ProtectSystem omitted: script calls sudo to reach wrapper
+PrivateTmp=true
