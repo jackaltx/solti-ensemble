@@ -1,6 +1,12 @@
 ---
 # Verify fail2ban alert system
 
+- name: Check notifier library is installed
+  ansible.builtin.stat:
+    path: /usr/local/lib/solti/notifier.py
+  register: _notifier_lib
+  failed_when: not _notifier_lib.stat.exists
+
 - name: Check timer is running
   ansible.builtin.systemd:
     name: fail2ban-alert.timer
