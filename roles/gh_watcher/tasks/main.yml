@@ -1,0 +1,8 @@
+---
+- name: Install gh_watcher
+  ansible.builtin.include_tasks: install.yml
+  when: gh_watcher_state == 'present'
+
+- name: Remove gh_watcher
+  ansible.builtin.include_tasks: remove.yml
+  when: gh_watcher_state == 'absent'

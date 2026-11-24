@@ -1,0 +1,230 @@
+{% raw %}#!/usr/bin/env python3
+"""
+GitHub CI Watcher — polls IMAP for GitHub notification emails, dispatches via _notifier_base.
+Deployed by: solti-ensemble/roles/gh_watcher
+
+Watches for:
+  - CI failure notifications (X-GitHub-Reason: ci_activity, subject matches 'failed')
+  - Analysis comments posted by the analyze-failure.yml workflow (CI Analysis marker)
+
+When both arrive for the same run, the second dispatch carries the analysis text,
+giving the Matrix room a diagnosis rather than just a failure URL.
+"""
+import email
+import email.header
+import imaplib
+import json
+import re
+import sys
+import time
+import yaml
+
+sys.path.insert(0, '/usr/local/lib/solti')
+import notifier
+
+CONFIG_FILE = "/etc/gh-watcher/config.yml"
+
+
+def load_config():
+    with open(CONFIG_FILE) as f:
+        return yaml.safe_load(f)
+
+
+def decode_header(value):
+    """Decode RFC 2047 encoded header to plain string."""
+    parts = email.header.decode_header(value)
+    decoded = []
+    for part, charset in parts:
+        if isinstance(part, bytes):
+            decoded.append(part.decode(charset or 'utf-8', errors='replace'))
+        else:
+            decoded.append(part)
+    return ''.join(decoded)
+
+
+def parse_gh_notification(msg):
+    """
+    Parse a GitHub notification email. Returns dict or None if not a CI failure.
+
+    GitHub CI failure emails have:
+      From: notifications@github.com
+      X-GitHub-Reason: ci_activity
+      Subject: [owner/repo] Run failed: Workflow Name - branch-name (#N)
+        or:  Re: [owner/repo] PR title (#N)  (when analysis comment posted)
+      List-ID: <repo.owner.github.com>
+
+    Analysis comment emails (from analyze-failure.yml) have subject like:
+      Re: [owner/repo] ...
+    and body contains "CI Analysis" marker.
+    """
+    subject = decode_header(msg.get('Subject', ''))
+    sender = msg.get('From', '')
+    reason = msg.get('X-GitHub-Reason', '')
+    list_id = msg.get('List-ID', '')
+    notification_id = msg.get('X-GitHub-Notification-ID', '')
+
+    # Must be from GitHub notifications
+    if 'notifications@github.com' not in sender:
+        return None
+
+    # Extract repo from List-ID: <repo.owner.github.com>
+    repo = ''
+    list_match = re.search(r'<([^.]+)\.([^.]+)\.github\.com>', list_id)
+    if list_match:
+        repo = f"{list_match.group(2)}/{list_match.group(1)}"
+
+    # Fallback: extract repo from subject [owner/repo]
+    if not repo:
+        subj_match = re.search(r'\[([^/\]]+/[^\]]+)\]', subject)
+        if subj_match:
+            repo = subj_match.group(1)
+
+    # Get plain text body
+    body = ''
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == 'text/plain':
+                body = part.get_payload(decode=True).decode('utf-8', errors='replace')
+                break
+    else:
+        body = msg.get_payload(decode=True).decode('utf-8', errors='replace')
+
+    # Check for Claude analysis comment (posted by analyze-failure.yml workflow)
+    analysis = ''
+    if 'CI Analysis' in body:
+        # Extract analysis text between "CI Analysis" header and "[View workflow run]" link
+        analysis_match = re.search(
+            r'CI Analysis[^\n]*\n+(.+?)(?:\[View workflow run\]|\Z)',
+            body, re.DOTALL
+        )
+        if analysis_match:
+            analysis = analysis_match.group(1).strip()[:800]
+
+    # Check for CI failure notification
+    is_ci_failure = (
+        reason == 'ci_activity' and
+        re.search(r'(failed|Run failed)', subject, re.IGNORECASE)
+    )
+
+    # Also match analysis comment replies (they come in as re: on the same thread)
+    is_analysis_comment = bool(analysis)
+
+    if not (is_ci_failure or is_analysis_comment):
+        return None
+
+    # Extract workflow name and branch from subject
+    # "Run failed: CI - main (#123)" or "[owner/repo] Run failed: CI - main"
+    workflow = ''
+    branch = ''
+    run_url = ''
+
+    workflow_match = re.search(r'Run failed:\s*([^-\n]+?)(?:\s*-\s*([^\s(#\n]+))?(?:\s*\(#\d+\))?$', subject)
+    if workflow_match:
+        workflow = workflow_match.group(1).strip()
+        branch = (workflow_match.group(2) or '').strip()
+
+    # Extract run URL from body (GitHub notification bodies include View it on GitHub link)
+    url_match = re.search(r'https://github\.com/[^\s\n>]+/actions/runs/\d+[^\s\n>]*', body)
+    if url_match:
+        run_url = url_match.group(0)
+
+    return {
+        'repo': repo,
+        'workflow': workflow or 'CI',
+        'branch': branch or 'unknown',
+        'run_url': run_url,
+        'analysis': analysis,
+        'is_ci_failure': is_ci_failure,
+        'notification_id': notification_id,
+    }
+
+
+def poll_mailbox(config):
+    """Connect to IMAP, fetch unread GitHub CI notifications, return list of parsed events."""
+    imap_cfg = config['imap']
+    events = []
+
+    try:
+        conn = imaplib.IMAP4_SSL(imap_cfg['host'], imap_cfg.get('port', 993))
+        conn.login(imap_cfg['username'], imap_cfg['password'])
+        conn.select(imap_cfg.get('folder', 'INBOX'))
+
+        # Search for unread GitHub notification emails
+        _, message_ids = conn.search(None, 'UNSEEN', 'FROM', '"notifications@github.com"')
+
+        for msg_id in message_ids[0].split():
+            _, msg_data = conn.fetch(msg_id, '(RFC822)')
+            raw = msg_data[0][1]
+            msg = email.message_from_bytes(raw)
+
+            parsed = parse_gh_notification(msg)
+            if parsed:
+                events.append(parsed)
+                # Mark as read so we don't process it again
+                conn.store(msg_id, '+FLAGS', '\\Seen')
+                print(f"watcher: processed: {parsed['repo']} {parsed['workflow']}")
+            else:
+                # Still mark non-CI GitHub emails as read to avoid reprocessing
+                conn.store(msg_id, '+FLAGS', '\\Seen')
+
+        conn.logout()
+    except Exception as e:
+        print(f"watcher: IMAP error: {e}")
+
+    return events
+
+
+def main():
+    try:
+        config = load_config()
+    except Exception as e:
+        print(f"watcher: config error: {e}")
+        return 1
+
+    events = poll_mailbox(config)
+    print(f"watcher: found {len(events)} CI notification(s)")
+
+    for parsed in events:
+        repo = parsed['repo']
+        workflow = parsed['workflow']
+        branch = parsed['branch']
+        analysis = parsed['analysis']
+
+        if analysis:
+            summary = f"CI analysis ready: {repo}/{workflow} on {branch}"
+            severity = "warn"
+        else:
+            summary = f"CI failed: {repo}/{workflow} on {branch}"
+            severity = "warn"
+
+        detail = {
+            "repo": repo,
+            "workflow": workflow,
+            "branch": branch,
+            "run_url": parsed['run_url'],
+        }
+        if analysis:
+            detail["analysis"] = analysis
+
+        # Use repo+workflow as the cooldown key to suppress duplicate alerts
+        # but allow the analysis comment through even if the initial failure was suppressed
+        source = f"gh_ci_{repo.replace('/', '_')}_{workflow.replace(' ', '_')}"
+        if analysis:
+            source += "_analysis"
+
+        ev = notifier.event(
+            source=source,
+            severity=severity,
+            summary=summary,
+            detail=detail,
+        )
+        dispatched = notifier.notify_with_cooldown(ev, config)
+        if not dispatched:
+            print(f"watcher: suppressed (cooldown active for {source})")
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+{% endraw %}

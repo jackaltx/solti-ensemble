@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: gh_watcher
+  author: jackaltx
+  description: GitHub CI notification watcher — IMAP poller dispatching via _notifier_base
+  license: MIT
+  min_ansible_version: "2.14"
+
+dependencies:
+  - role: _notifier_base

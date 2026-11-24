@@ -1,0 +1,30 @@
+# gh_watcher Configuration
+# Deployed by: solti-ensemble/roles/gh_watcher
+
+state_dir: /var/lib/gh-watcher
+cooldown_minutes: {{ gh_watcher_cooldown_minutes }}
+
+imap:
+  host: "{{ gh_watcher_imap_host }}"
+  port: {{ gh_watcher_imap_port }}
+  username: "{{ gh_watcher_imap_username }}"
+  password: "{{ gh_watcher_imap_password }}"
+  folder: "{{ gh_watcher_imap_folder }}"
+
+channels:
+  matrix:
+    enabled: {{ gh_watcher_matrix_enabled | bool | lower }}
+    homeserver: "{{ gh_watcher_matrix_homeserver }}"
+    token: "{{ gh_watcher_matrix_token }}"
+    room_id: "{{ gh_watcher_matrix_room_id }}"
+
+  redis:
+    enabled: {{ gh_watcher_redis_enabled | bool | lower }}
+    url: "{{ gh_watcher_redis_url }}"
+    channel: "{{ gh_watcher_redis_channel }}"
+
+  amqp:
+    enabled: {{ gh_watcher_amqp_enabled | bool | lower }}
+    url: "{{ gh_watcher_amqp_url }}"
+    exchange: "{{ gh_watcher_amqp_exchange }}"
+    routing_key: "{{ gh_watcher_amqp_routing_key }}"

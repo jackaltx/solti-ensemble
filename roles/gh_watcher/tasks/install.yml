@@ -1,0 +1,97 @@
+---
+# Install gh_watcher: IMAP poller for GitHub CI notification emails
+
+- name: Install _notifier_base library
+  ansible.builtin.include_role:
+    name: _notifier_base
+
+- name: Assert at least one channel is configured
+  ansible.builtin.assert:
+    that:
+      - "(gh_watcher_matrix_enabled | bool) or (gh_watcher_redis_enabled | bool) or (gh_watcher_amqp_enabled | bool)"
+    fail_msg: "No notification channel configured — enable matrix, redis, or amqp channel"
+
+- name: Assert IMAP credentials are set
+  ansible.builtin.assert:
+    that:
+      - gh_watcher_imap_host | length > 0
+      - gh_watcher_imap_username | length > 0
+      - gh_watcher_imap_password | length > 0
+    fail_msg: "IMAP credentials required: set gh_watcher_imap_host, gh_watcher_imap_username, gh_watcher_imap_password"
+
+- name: Create system user
+  ansible.builtin.user:
+    name: "{{ gh_watcher_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Install Python dependencies
+  ansible.builtin.package:
+    name:
+      - python3-yaml
+    state: present
+
+- name: Create config directory
+  ansible.builtin.file:
+    path: /etc/gh-watcher
+    state: directory
+    owner: root
+    group: "{{ gh_watcher_group }}"
+    mode: '0750'
+
+- name: Create state directory
+  ansible.builtin.file:
+    path: /var/lib/gh-watcher
+    state: directory
+    owner: "{{ gh_watcher_user }}"
+    group: "{{ gh_watcher_group }}"
+    mode: '0750'
+
+- name: Deploy sensor script
+  ansible.builtin.template:
+    src: gh-watcher.py.j2
+    dest: /usr/local/bin/gh-watcher.py
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart gh-watcher timer
+
+- name: Deploy config file
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /etc/gh-watcher/config.yml
+    owner: root
+    group: "{{ gh_watcher_group }}"
+    mode: '0640'
+  no_log: "{{ gh_watcher_no_log }}"
+  notify: Restart gh-watcher timer
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: gh-watcher.service.j2
+    dest: /etc/systemd/system/gh-watcher.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd for gh_watcher
+    - Restart gh-watcher timer
+
+- name: Deploy systemd timer
+  ansible.builtin.template:
+    src: gh-watcher.timer.j2
+    dest: /etc/systemd/system/gh-watcher.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd for gh_watcher
+    - Enable gh-watcher timer
+
+- name: Enable and start timer
+  ansible.builtin.systemd:
+    name: gh-watcher.timer
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,43 @@
+---
+# gh_watcher role defaults
+
+# State management
+gh_watcher_state: present  # present or absent
+
+# System user
+gh_watcher_user: "gh-watcher"
+gh_watcher_group: "gh-watcher"
+
+# Timer interval
+gh_watcher_interval: "5min"
+
+# IMAP configuration — no defaults, must be set via inventory/Vault
+gh_watcher_imap_host: ""
+gh_watcher_imap_port: 993
+gh_watcher_imap_username: ""
+gh_watcher_imap_password: ""
+gh_watcher_imap_folder: "INBOX"
+
+# Only process GitHub notification emails — filter by this sender
+gh_watcher_sender_filter: "notifications@github.com"
+
+# Cooldown: suppress repeat alerts for the same repo/workflow within N minutes
+gh_watcher_cooldown_minutes: 30
+
+# no_log standard
+gh_watcher_no_log: "{{ mylab_nolog | default(true) }}"
+
+# ── _notifier_base channel enables ───────────────────────────────────────────
+gh_watcher_matrix_enabled: false
+gh_watcher_matrix_homeserver: ""
+gh_watcher_matrix_token: ""
+gh_watcher_matrix_room_id: ""
+
+gh_watcher_redis_enabled: false
+gh_watcher_redis_url: ""
+gh_watcher_redis_channel: "solti_events"
+
+gh_watcher_amqp_enabled: false
+gh_watcher_amqp_url: ""
+gh_watcher_amqp_exchange: "solti_events"
+gh_watcher_amqp_routing_key: "github_ci"

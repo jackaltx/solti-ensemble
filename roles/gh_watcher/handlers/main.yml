@@ -1,0 +1,14 @@
+---
+- name: Reload systemd for gh_watcher
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable gh-watcher timer
+  ansible.builtin.systemd:
+    name: gh-watcher.timer
+    enabled: true
+
+- name: Restart gh-watcher timer
+  ansible.builtin.systemd:
+    name: gh-watcher.timer
+    state: restarted

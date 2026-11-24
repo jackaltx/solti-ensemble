@@ -1,0 +1,47 @@
+---
+- name: Stop and disable timer
+  ansible.builtin.systemd:
+    name: gh-watcher.timer
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  ignore_errors: true
+
+- name: Stop service
+  ansible.builtin.systemd:
+    name: gh-watcher.service
+    state: stopped
+  ignore_errors: true
+
+- name: Remove systemd timer
+  ansible.builtin.file:
+    path: /etc/systemd/system/gh-watcher.timer
+    state: absent
+  notify: Reload systemd for gh_watcher
+
+- name: Remove systemd service
+  ansible.builtin.file:
+    path: /etc/systemd/system/gh-watcher.service
+    state: absent
+  notify: Reload systemd for gh_watcher
+
+- name: Remove sensor script
+  ansible.builtin.file:
+    path: /usr/local/bin/gh-watcher.py
+    state: absent
+
+- name: Remove config directory
+  ansible.builtin.file:
+    path: /etc/gh-watcher
+    state: absent
+
+- name: Remove state directory
+  ansible.builtin.file:
+    path: /var/lib/gh-watcher
+    state: absent
+
+- name: Remove system user
+  ansible.builtin.user:
+    name: "{{ gh_watcher_user }}"
+    state: absent
+    remove: true
