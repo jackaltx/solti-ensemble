@@ -46,4 +46,4 @@ Thumbs.db
 local_*
 
 # Private inventory — nested private git repo (jackaltx/solti-ensemble-inventory on Gitea)
-inventory/hosts/
+inventory/hosts

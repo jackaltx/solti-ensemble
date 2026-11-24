@@ -1,3 +1,0 @@
----
-# Handlers removed - OpenClaw manages its own systemd user services
-# Service restart is handled inline in configure.yml when config changes
