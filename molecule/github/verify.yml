@@ -1,0 +1,23 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+
+  vars:
+    test_role: "{{ lookup('env', 'MOLECULE_TEST_ROLE') | default('mariadb', true) }}"
+
+  tasks:
+    - name: Load shared test configuration
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/vars/test-config.yml"
+      delegate_to: localhost
+      run_once: true
+
+    - name: "{{ inventory_hostname }} | {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      ansible.builtin.debug:
+        msg: "Testing role: {{ test_role }}"
+
+    - name: "Run verify for role: {{ test_role }}"
+      ansible.builtin.include_role:
+        name: "{{ project_root }}/roles/{{ test_role }}"
+        tasks_from: verify
