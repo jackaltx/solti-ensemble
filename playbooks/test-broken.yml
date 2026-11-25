@@ -1,8 +1,0 @@
----
-# deliberate syntax error to test analyze-failure workflow
-- hosts: all
-  tasks:
-    - name: broken task
-      ansible.builtin.debug:
-        msg: "test"
-       invalid_key: this indentation is wrong
