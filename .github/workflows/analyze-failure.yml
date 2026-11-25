@@ -8,7 +8,10 @@ on:
 
 jobs:
   analyze:
-    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' }}
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == 'test')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -113,4 +116,49 @@ jobs:
                   check=True
               )
               print(f"Posted to commit {sha[:8]}")
+          PYEOF
+
+      - name: Send analysis to Matrix
+        env:
+          MATRIX_URL: ${{ secrets.MATRIX_HOMESERVER_URL }}
+          MATRIX_TOKEN: ${{ secrets.MATRIX_CI_TOKEN }}
+          MATRIX_ROOM: ${{ secrets.MATRIX_CI_ROOM_ID }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request, urllib.parse
+
+          analysis = open("analysis.txt").read().strip()
+          sha = os.environ["SHA"][:7]
+          body = (
+              f"❌ {os.environ['REPO']} — {os.environ['WORKFLOW_NAME']} "
+              f"failed ({os.environ['BRANCH']} @ {sha})\n\n"
+              f"{analysis}\n\n"
+              f"{os.environ['WORKFLOW_URL']}"
+          )
+
+          room = os.environ["MATRIX_ROOM"]
+          room_encoded = urllib.parse.quote(room)
+          import time
+          txn_id = f"ci-{int(time.time() * 1e9)}"
+          url = f"{os.environ['MATRIX_URL']}/_matrix/client/v3/rooms/{room_encoded}/send/m.room.message/{txn_id}"
+
+          req = urllib.request.Request(
+              url,
+              data=json.dumps({"msgtype": "m.text", "body": body}).encode(),
+              headers={
+                  "Authorization": f"Bearer {os.environ['MATRIX_TOKEN']}",
+                  "Content-Type": "application/json",
+              },
+              method="PUT",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  print(f"Matrix notified: {resp.status}")
+          except Exception as e:
+              print(f"Matrix notify failed (non-fatal): {e}")
           PYEOF
