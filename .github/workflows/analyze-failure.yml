@@ -125,16 +125,19 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           REPO: ${{ github.repository }}
+          COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
         run: |
           python3 << 'PYEOF'
           import json, os, urllib.request, urllib.parse
 
           analysis = open("analysis.txt").read().strip()
           sha = os.environ["SHA"][:7]
+          commit_first_line = os.environ.get("COMMIT_MSG", "").splitlines()[0] if os.environ.get("COMMIT_MSG") else ""
           body = (
               f"❌ {os.environ['REPO']} — {os.environ['WORKFLOW_NAME']} "
-              f"failed ({os.environ['BRANCH']} @ {sha})\n\n"
-              f"{analysis}\n\n"
+              f"failed ({os.environ['BRANCH']} @ {sha})\n"
+              + (f"{commit_first_line}\n" if commit_first_line else "")
+              + f"\n{analysis}\n\n"
               f"{os.environ['WORKFLOW_URL']}"
           )
 
