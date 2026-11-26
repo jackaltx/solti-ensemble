@@ -47,3 +47,6 @@ local_*
 
 # Private inventory — nested private git repo (jackaltx/solti-ensemble-inventory on Gitea)
 inventory/hosts
+
+# Developer architecture notes — stay local, not shipped
+CLAUDE.md
